@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB Audit Dashboard - Improved OCR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .audit-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .audit-item {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            border-left: 5px solid #cbd5e1;
+        }
+
+        .audit-item.discrepancy {
+            border-left-color: var(--danger);
+        }
+
+        .audit-item.match {
+            border-left-color: var(--success);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .page-badge {
+            background: #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+
+        .stats-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stats-label {
+            color: #64748b;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stats-value {
+            font-weight: 700;
+        }
+
+        .comparison-view {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .text-box {
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+        }
+
+        .text-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .btn-resolve {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-resolve:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-resolve:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .loading-spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .resolved-text {
+            border: 2px solid var(--success) !important;
+            background: #f0fdf4 !important;
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: var(--primary);
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Converter</a>
+        <header>
+            <div>
+                <h1>EPUB Audit Dashboard</h1>
+                <p style="color: #64748b; margin: 5px 0 0 0;">Comparing PDF OCR vs Existing EPUB Structure</p>
+            </div>
+            <div style="text-align: right;">
+                <span class="stats-value" style="color: var(--danger);">{{ results|selectattr('status', 'equalto',
+                    'Discrepancy')|list|length }} Issues Found</span>
+            </div>
+        </header>
+
+        <div class="audit-grid">
+            {% for item in results %}
+            <div class="audit-item {{ 'discrepancy' if item.status == 'Discrepancy' else 'match' }}"
+                id="page-{{ item.page_num }}">
+                <div class="item-header">
+                    <div>
+                        <span class="page-badge">Page {{ item.page_num }}</span>
+                        <div class="stats" style="margin-top: 8px;">
+                            <div class="stats-item">
+                                <span class="stats-label">PDF Lines (Est)</span>
+                                <span class="stats-value">{{ item.estimated_lines }}</span>
+                            </div>
+                            <div class="stats-item">
+                                <span class="stats-label">EPUB Lines</span>
+                                <span class="stats-value">{{ item.epub_lines }}</span>
+                            </div>
+                            <div class="stats-item">
+                                <span class="stats-label">Status</span>
+                                <span class="stats-value"
+                                    style="color: {{ 'var(--danger)' if item.status == 'Discrepancy' else 'var(--success)' }}">
+                                    {{ item.status }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% if item.status == 'Discrepancy' %}
+                    <button class="btn btn-resolve" onclick="resolveDiscrepancy('{{ job_id }}', {{ item.page_num }})">
+                        <span class="loading-spinner"></span>
+                        <span class="btn-text">Resolve with Gemini</span>
+                    </button>
+                    {% endif %}
+                </div>
+
+                <div class="comparison-view">
+                    <div>
+                        <span class="text-label">Existing EPUB Content</span>
+                        <div class="text-box">{{ item.epub_text }}</div>
+                    </div>
+                    <div>
+                        <span class="text-label">High-Accuracy Fix (Resolving...)</span>
+                        <div class="text-box" id="improved-{{ item.page_num }}">
+                            <span style="color: #94a3b8; font-style: italic;">No changes yet. Click 'Resolve' for Gemini
+                                rescue.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        async function resolveDiscrepancy(jobId, pageNum) {
+            const btn = document.querySelector(`#page-${pageNum} .btn-resolve`);
+            const spinner = btn.querySelector('.loading-spinner');
+            const btnText = btn.querySelector('.btn-text');
+            const resultBox = document.getElementById(`improved-${pageNum}`);
+
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            btnText.innerText = 'Resolving...';
+
+            try {
+                const response = await fetch(`/resolve/${jobId}/${pageNum}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.improved_text) {
+                    resultBox.innerText = data.improved_text;
+                    resultBox.classList.add('resolved-text');
+                    btnText.innerText = '✓ Resolved';
+                    btn.style.background = 'var(--success)';
+                } else {
+                    alert('Resolution failed: ' + (data.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btnText.innerText = 'Retry';
+                }
+            } catch (err) {
+                alert('Error connecting to server: ' + err);
+                btn.disabled = false;
+                btnText.innerText = 'Retry';
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

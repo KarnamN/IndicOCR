@@ -1,0 +1,223 @@
+Metadata-Version: 2.4
+Name: teluguocr
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: datasets>=4.4.1
+Requires-Dist: easyocr>=1.7.2
+Requires-Dist: fastparquet>=2024.11.0
+Requires-Dist: huggingface-hub>=1.1.2
+Requires-Dist: joblib>=1.5.2
+Requires-Dist: matplotlib>=3.10.7
+Requires-Dist: numpy>=2.3.4
+Requires-Dist: pandas>=2.3.3
+Requires-Dist: pillow>=12.0.0
+Requires-Dist: playwright>=1.55.0
+Requires-Dist: pyarrow>=22.0.0
+Requires-Dist: pytesseract>=0.3.13
+Requires-Dist: pdf2image>=1.17.0
+Requires-Dist: ebooklib>=0.18
+Requires-Dist: flask>=3.0.0
+Requires-Dist: flask-cors>=4.0.0
+Requires-Dist: werkzeug>=3.0.0
+Requires-Dist: lxml>=5.0.0
+
+# Telugu PDF to EPUB Converter
+
+Convert scanned Telugu PDF documents to reflowable EPUB ebooks using OCR (Optical Character Recognition).
+
+## Features
+
+- 📄 **Page-by-Page Processing**: Extracts each PDF page as a high-resolution image
+- 🔄 **Auto-Rotation**: Automatically detects and corrects page orientation
+- 🔍 **Multi-Language OCR**: Supports Telugu and English text recognition
+- 🧹 **Text Cleaning**: Removes page numbers and normalizes formatting
+- 📚 **Reflowable EPUB**: Generates standard EPUB 3.0 files with searchable text
+- 🌐 **Web Interface**: User-friendly web UI with drag-and-drop upload
+- 📊 **Progress Tracking**: Real-time conversion progress updates
+- ⚡ **Parallel Processing**: Fast OCR with multi-core support
+
+## Installation
+
+### Prerequisites
+
+1. **Python 3.12+**
+2. **Tesseract OCR** with Telugu language data
+3. **Poppler** (for PDF processing)
+
+#### Install Tesseract (Ubuntu/Debian)
+```bash
+sudo apt-get update
+sudo apt-get install tesseract-ocr tesseract-ocr-tel tesseract-ocr-eng
+```
+
+#### Install Tesseract (macOS)
+```bash
+brew install tesseract tesseract-lang
+```
+
+#### Install Poppler (Ubuntu/Debian)
+```bash
+sudo apt-get install poppler-utils
+```
+
+#### Install Poppler (macOS)
+```bash
+brew install poppler
+```
+
+### Install Python Dependencies
+
+```bash
+# Clone the repository
+cd TeluguOCR-develop
+
+# Install dependencies using pip
+pip install -e .
+
+# Or using uv (faster)
+uv pip install -e .
+```
+
+## Usage
+
+### Web Interface (Recommended)
+
+1. **Start the web server**:
+   ```bash
+   ./scripts/start.sh
+   ```
+
+2. **Open your browser** and navigate to:
+   ```
+   http://localhost:5000
+   ```
+
+3. **Upload your PDF** and configure options
+
+4. **Download the generated EPUB** when conversion completes
+
+### Command-Line Interface
+
+#### Basic Usage
+```bash
+python scripts/convert_cli.py input.pdf output.epub
+```
+
+#### With Metadata
+```bash
+python scripts/convert_cli.py input.pdf output.epub \
+  --title "My Telugu Book" \
+  --author "Author Name" \
+  --language te
+```
+
+#### Advanced Options
+```bash
+python scripts/convert_cli.py input.pdf output.epub \
+  --title "Book Title" \
+  --author "Author Name" \
+  --dpi 400 \
+  --pages-per-chapter 15 \
+  --verbose
+```
+
+#### Help
+```bash
+python scripts/convert_cli.py --help
+```
+
+## Project Structure
+
+```
+TeluguOCR-develop/
+├── src/                      # Main application code
+│   ├── config.py            # Configuration settings
+│   ├── pdf_processor.py     # PDF to images extraction
+│   ├── ocr_engine.py        # OCR text extraction
+│   ├── text_cleaner.py      # Text cleaning utilities
+│   ├── epub_builder.py      # EPUB generation
+│   ├── converter.py         # Main orchestrator
+│   └── web/                 # Flask web application
+│       ├── app.py           # Flask app
+│       ├── templates/       # HTML templates
+│       └── static/          # CSS, JavaScript
+├── scripts/                  # Utility scripts
+│   ├── start.sh             # Start web server
+│   └── convert_cli.py       # CLI tool
+├── uploads/                  # Temporary PDF storage
+├── outputs/                  # Generated EPUB files
+├── tests/                    # Test files
+├── correction_model/         # OCR correction models
+├── custom_models/            # Original OCR models
+└── pyproject.toml           # Python dependencies
+```
+
+## Configuration
+
+Edit `src/config.py` to customize settings:
+
+```python
+# OCR Settings
+OCR_LANGUAGES = ['tel', 'eng']  # Languages for OCR
+OCR_DPI = 300                   # Image resolution
+
+# EPUB Settings
+PAGES_PER_CHAPTER = 10          # Pages per chapter
+EMBED_FONTS = True              # Embed Telugu fonts
+
+# Text Cleaning
+REMOVE_PAGE_NUMBERS = True      # Remove page numbers
+```
+
+## How It Works
+
+1. **PDF Extraction**: Each page is converted to a high-DPI image (300 DPI)
+2. **Auto-Rotation**: Pages are automatically rotated to correct orientation
+3. **OCR Processing**: Tesseract extracts text from each image
+4. **Text Cleaning**: Removes page numbers and normalizes formatting
+5. **EPUB Generation**: Creates a reflowable EPUB with proper structure
+
+## Output Format
+
+The generated EPUB contains:
+- Proper EPUB 3.0 structure
+- Metadata (title, author, language)
+- Table of contents
+- CSS styling for Telugu text
+- Reflowable text (resizable, searchable)
+
+## Troubleshooting
+
+### "Tesseract not found"
+Install Tesseract OCR and ensure it's in your PATH.
+
+### "pdf2image error"
+Install Poppler utilities for PDF processing.
+
+### Low OCR accuracy
+- Use higher DPI (400-600) for better quality
+- Ensure scans are clear and straight
+- Update to latest Telugu traineddata
+
+### Memory issues with large PDFs
+- Process in smaller batches
+- Reduce DPI to 200-250
+- Disable parallel processing in config
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## License
+
+This project is based on the research paper:
+K. Chandra Prakash, Y. M. Srikar, G. Trishal, S. Mandal and S. S. Channappayya, 
+"Optical Character Recognition (OCR) for Telugu: Database, Algorithm and Application"
+
+## Acknowledgments
+
+- Tesseract OCR for text recognition
+- ebooklib for EPUB generation
+- Flask for web interface

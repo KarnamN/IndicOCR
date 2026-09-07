@@ -1,0 +1,62 @@
+================================================================================
+FOLDER STRUCTURE REPORT
+================================================================================
+Root Directory: test_telugu_folder
+Scan Date: 2025-11-23 11:10:05
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+Total Files:       6
+Total Directories: 3
+Total Size:        117.00 B
+Telugu Files:      4
+
+File Types:
+  .txt                     5 files
+  .pdf                     1 files
+
+================================================================================
+DETAILED LISTING
+================================================================================
+
+
+📁 Directory: (root)
+--------------------------------------------------------------------------------
+  📂 English_Books
+     Contains: 2 files, 0 subdirectories
+  📂 తెలుగు_పుస్తకాలు [Telugu] → telugu_pustakalu
+     Contains: 2 files, 0 subdirectories
+  📂 మిశ్రమ_Mixed_Folder [Telugu] → mishrama_Mixed_Folder
+     Contains: 2 files, 0 subdirectories
+
+📁 Directory: English_Books
+--------------------------------------------------------------------------------
+  📄 sample_book.txt
+     Size:      19.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .txt
+  📄 హైదరాబాద్_గైడ్.txt [Telugu] → haidarabad_gaid.txt
+     Size:      23.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .txt
+
+📁 Directory: తెలుగు_పుస్తకాలు
+--------------------------------------------------------------------------------
+  📄 తెలుగు_వ్యాకరణం.pdf [Telugu] → telugu_vyakaranam.pdf
+     Size:      22.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .pdf
+  📄 భారతదేశం_చరిత్ర.txt [Telugu] → bharatadesham_charitra.txt
+     Size:      24.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .txt
+
+📁 Directory: మిశ్రమ_Mixed_Folder
+--------------------------------------------------------------------------------
+  📄 readme.txt
+     Size:      11.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .txt
+  📄 విజయవాడ.txt [Telugu] → vijayavada.txt
+     Size:      18.00 B  |  Modified: 2025-11-23 11:10:16
+     Type: .txt
+
+================================================================================
+END OF REPORT
+================================================================================

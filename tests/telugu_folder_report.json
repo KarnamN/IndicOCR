@@ -1,0 +1,124 @@
+{
+  "root_directory": "test_telugu_folder",
+  "scan_date": "2025-11-23T11:10:05.236295",
+  "statistics": {
+    "total_files": 6,
+    "total_dirs": 3,
+    "total_size": 117,
+    "telugu_files": 4,
+    "file_types": {
+      ".txt": 5,
+      ".pdf": 1
+    }
+  },
+  "items": [
+    {
+      "type": "directory",
+      "name": "English_Books",
+      "translated_name": "English_Books",
+      "has_telugu": false,
+      "path": "test_telugu_folder/English_Books",
+      "relative_path": "English_Books",
+      "file_count": 2,
+      "dir_count": 0
+    },
+    {
+      "type": "directory",
+      "name": "తెలుగు_పుస్తకాలు",
+      "translated_name": "telugu_pustakalu",
+      "has_telugu": true,
+      "path": "test_telugu_folder/తెలుగు_పుస్తకాలు",
+      "relative_path": "తెలుగు_పుస్తకాలు",
+      "file_count": 2,
+      "dir_count": 0
+    },
+    {
+      "type": "directory",
+      "name": "మిశ్రమ_Mixed_Folder",
+      "translated_name": "mishrama_Mixed_Folder",
+      "has_telugu": true,
+      "path": "test_telugu_folder/మిశ్రమ_Mixed_Folder",
+      "relative_path": "మిశ్రమ_Mixed_Folder",
+      "file_count": 2,
+      "dir_count": 0
+    },
+    {
+      "type": "file",
+      "name": "sample_book.txt",
+      "translated_name": "sample_book.txt",
+      "has_telugu": false,
+      "path": "test_telugu_folder/English_Books/sample_book.txt",
+      "relative_path": "English_Books/sample_book.txt",
+      "size": 19,
+      "size_formatted": "19.00 B",
+      "extension": ".txt",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    },
+    {
+      "type": "file",
+      "name": "హైదరాబాద్_గైడ్.txt",
+      "translated_name": "haidarabad_gaid.txt",
+      "has_telugu": true,
+      "path": "test_telugu_folder/English_Books/హైదరాబాద్_గైడ్.txt",
+      "relative_path": "English_Books/హైదరాబాద్_గైడ్.txt",
+      "size": 23,
+      "size_formatted": "23.00 B",
+      "extension": ".txt",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    },
+    {
+      "type": "file",
+      "name": "తెలుగు_వ్యాకరణం.pdf",
+      "translated_name": "telugu_vyakaranam.pdf",
+      "has_telugu": true,
+      "path": "test_telugu_folder/తెలుగు_పుస్తకాలు/తెలుగు_వ్యాకరణం.pdf",
+      "relative_path": "తెలుగు_పుస్తకాలు/తెలుగు_వ్యాకరణం.pdf",
+      "size": 22,
+      "size_formatted": "22.00 B",
+      "extension": ".pdf",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    },
+    {
+      "type": "file",
+      "name": "భారతదేశం_చరిత్ర.txt",
+      "translated_name": "bharatadesham_charitra.txt",
+      "has_telugu": true,
+      "path": "test_telugu_folder/తెలుగు_పుస్తకాలు/భారతదేశం_చరిత్ర.txt",
+      "relative_path": "తెలుగు_పుస్తకాలు/భారతదేశం_చరిత్ర.txt",
+      "size": 24,
+      "size_formatted": "24.00 B",
+      "extension": ".txt",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    },
+    {
+      "type": "file",
+      "name": "readme.txt",
+      "translated_name": "readme.txt",
+      "has_telugu": false,
+      "path": "test_telugu_folder/మిశ్రమ_Mixed_Folder/readme.txt",
+      "relative_path": "మిశ్రమ_Mixed_Folder/readme.txt",
+      "size": 11,
+      "size_formatted": "11.00 B",
+      "extension": ".txt",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    },
+    {
+      "type": "file",
+      "name": "విజయవాడ.txt",
+      "translated_name": "vijayavada.txt",
+      "has_telugu": true,
+      "path": "test_telugu_folder/మిశ్రమ_Mixed_Folder/విజయవాడ.txt",
+      "relative_path": "మిశ్రమ_Mixed_Folder/విజయవాడ.txt",
+      "size": 18,
+      "size_formatted": "18.00 B",
+      "extension": ".txt",
+      "modified": "2025-11-23 11:10:16",
+      "created": "2025-11-23 11:10:16"
+    }
+  ]
+}

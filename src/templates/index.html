@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telugu PDF to EPUB Converter</title>
+    <meta name="description" content="Convert scanned PDFs to EPUB format with advanced Telugu OCR support">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <!-- Background Animation -->
+    <div class="background-animation">
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="gradient-orb orb-3"></div>
+    </div>
+
+    <!-- App Layout Wrapper -->
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="48" height="48" rx="12" fill="url(#sidebarGradient)" />
+                    <path d="M14 18h20M14 24h20M14 30h14" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+                    <defs>
+                        <linearGradient id="sidebarGradient" x1="0" y1="0" x2="48" y2="48">
+                            <stop offset="0%" stop-color="#0d9488" />
+                            <stop offset="100%" stop-color="#4f46e5" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="logo-text">
+                    <h2>MyOCR Tools</h2>
+                    <p>Advanced Dashboard</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <button class="menu-item active" data-tab="epub-tab">
+                    <span class="menu-icon">📚</span>
+                    <span class="menu-label">EPUB Converter</span>
+                </button>
+                <button class="menu-item" data-tab="pdf-tab">
+                    <span class="menu-icon">🛠️</span>
+                    <span class="menu-label">PDF Tools</span>
+                </button>
+                <button class="menu-item" data-tab="repair-tab">
+                    <span class="menu-icon">✨</span>
+                    <span class="menu-label">Book Repair</span>
+                </button>
+                <button class="menu-item" data-tab="duplicate-tab">
+                    <span class="menu-icon">🔍</span>
+                    <span class="menu-label">Duplicate Finder</span>
+                </button>
+                <button class="menu-item" data-tab="search-copy-tab">
+                    <span class="menu-icon">📂</span>
+                    <span class="menu-label">Search &amp; Copier</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <span class="status-indicator-dot"></span>
+                <span class="status-text">System Active</span>
+            </div>
+        </aside>
+
+        <!-- Main Content Area Wrapper -->
+        <div class="main-wrapper">
+            <!-- Main Container -->
+            <div class="container">
+                <!-- Header -->
+                <header class="header">
+                    <!-- Sidebar Mobile Toggle -->
+                    <button class="sidebar-toggle-btn" onclick="toggleSidebar()">
+                        ☰ Menu
+                    </button>
+                    <div class="logo">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="48" height="48" rx="12" fill="url(#gradient1)" />
+                    <path d="M14 18h20M14 24h20M14 30h14" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+                    <defs>
+                        <linearGradient id="gradient1" x1="0" y1="0" x2="48" y2="48">
+                            <stop offset="0%" stop-color="#667eea" />
+                            <stop offset="100%" stop-color="#764ba2" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="logo-text">
+                    <h1>PDF to EPUB</h1>
+                    <p>Telugu OCR Converter</p>
+                </div>
+            </div>
+            <button class="status-btn" id="statusBtn">
+                <span class="status-indicator"></span>
+                System Status
+            </button>
+            <div class="usage-badge" id="geminiUsageBadge" title="Gemini Monthly Quota">
+                <span class="usage-label">Gemini:</span>
+                <span class="usage-value" id="geminiUsageValue">0/1500</span>
+                <div class="usage-bar-mini"><div class="usage-fill-mini" id="geminiUsageFill" style="width: 0%"></div></div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="tab-content active" id="epub-tab">
+                <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="upload-card">
+                    <div class="upload-icon">
+                        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="38" stroke="url(#gradient2)" stroke-width="3"
+                                stroke-dasharray="8 4" />
+                            <path d="M40 25v30M25 40h30" stroke="url(#gradient2)" stroke-width="3"
+                                stroke-linecap="round" />
+                            <defs>
+                                <linearGradient id="gradient2" x1="0" y1="0" x2="80" y2="80">
+                                    <stop offset="0%" stop-color="#667eea" />
+                                    <stop offset="100%" stop-color="#764ba2" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h2>Upload Your PDF</h2>
+                    <p class="upload-description">Drop your scanned PDF here or click to browse</p>
+
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="file-input-wrapper">
+                            <input type="file" id="fileInput" name="file" accept=".pdf" required>
+                            <label for="fileInput" class="file-label">
+                                <span class="file-label-text">Choose PDF File</span>
+                                <span class="file-name" id="fileName">No file selected</span>
+                            </label>
+                        </div>
+
+                        <!-- Configuration Options -->
+                        <div class="config-section">
+                            <h3>Configuration</h3>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="title">Book Title</label>
+                                    <input type="text" id="title" name="title" placeholder="Enter book title"
+                                        value="Converted Document">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="author">Author</label>
+                                    <input type="text" id="author" name="author" placeholder="Enter author name"
+                                        value="Unknown">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="language">OCR Language</label>
+                                    <select id="language" name="language">
+                                        <option value="tel" selected>Telugu (తెలుగు)</option>
+                                        <option value="tel+eng">Telugu + English</option>
+                                        <option value="eng">English Only</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="dpi">DPI Quality</label>
+                                    <select id="dpi" name="dpi">
+                                        <option value="150">Fast (150 DPI)</option>
+                                        <option value="250">Balanced (250 DPI)</option>
+                                        <option value="300" selected>High Quality (300 DPI)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group checkbox-group">
+                                    <input type="checkbox" id="detectTables" name="detect_tables" checked>
+                                    <label for="detectTables">Detect Tables</label>
+                                </div>
+
+                                <div class="form-group checkbox-group">
+                                    <input type="checkbox" id="preserveImages" name="preserve_images" checked>
+                                    <label for="preserveImages">Preserve Images</label>
+                                </div>
+
+                                <div class="form-group checkbox-group rescue-group">
+                                    <input type="checkbox" id="enableRescue" name="enable_rescue" checked>
+                                    <label for="enableRescue" title="Automatically use Gemini to fix Tesseract failures">
+                                        Enable Gemini Rescue
+                                        <span class="info-icon" title="If Tesseract produces junk or misses text, Gemini will automatically step in to repair the page.">ⓘ</span>
+                                    </label>
+                                </div>
+
+                                <div class="form-group full-width">
+                                    <label for="onlyPages">Only Process These Pages (Leave empty for ALL)</label>
+                                    <input type="text" id="onlyPages" name="only_pages"
+                                        placeholder="e.g., 4, 10, 50-60 (Useful for fixing specific pages)">
+                                    <small
+                                        style="color: #667eea; font-weight: 500; font-size: 0.85em; margin-top: 4px; display: block;">
+                                        Targeted OCR: Processing ONLY these pages will be much faster. Supports:
+                                        4,10,50-60.
+                                    </small>
+                                </div>
+
+                                <div class="form-group full-width">
+                                    <label for="skipOcrPages">Skip OCR on Pages (Image Only)</label>
+                                    <input type="text" id="skipOcrPages" name="skip_ocr_pages"
+                                        placeholder="e.g., 5-9, 10,11 (preserve as images only)">
+                                    <small style="color: #888; font-size: 0.85em; margin-top: 4px; display: block;">
+                                        Skip OCR and preserve as images only. Supports: single pages (5,7), ranges
+                                        (5-9), or mixed (5-9,10,11). Useful for problematic pages.
+                                    </small>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="submit-btn" id="submitBtn">
+                                <span>Convert to EPUB & MOBI</span>
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                    <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-card">
+                    <div class="progress-icon">
+                        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#gradient3)" stroke-width="4"
+                                stroke-dasharray="220" stroke-dashoffset="0" class="progress-circle" />
+                            <defs>
+                                <linearGradient id="gradient3" x1="0" y1="0" x2="80" y2="80">
+                                    <stop offset="0%" stop-color="#667eea" />
+                                    <stop offset="100%" stop-color="#764ba2" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h3>Converting...</h3>
+                    <p id="progressBookInfo" style="font-weight: 500; color: #4f46e5; margin-bottom: 5px; font-size: 0.95em;"></p>
+                    <p id="progressText">Initializing...</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%;">
+                            <span class="progress-percentage" id="progressPercentage">0%</span>
+                        </div>
+                    </div>
+                    <button type="button" class="stop-btn" id="stopBtn" onclick="cancelConversion()">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor" />
+                        </svg>
+                        <span>Stop Conversion</span>
+                    </button>
+                </div>
+
+                <!-- Page Complexity Analysis Dashboard -->
+                <div class="complexity-dashboard" id="complexityDashboard" style="display: none;">
+                    <h3 class="dashboard-title">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 17h14M5 13V7M9 13V4M13 13V9M17 13V6" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" />
+                        </svg>
+                        Page Complexity Analysis
+                    </h3>
+
+                    <!-- Summary Stats -->
+                    <div class="complexity-stats" id="complexityStats">
+                        <div class="stat-card">
+                            <span class="stat-label">Avg Complexity</span>
+                            <span class="stat-value" id="avgComplexity">—</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">🔧 Tesseract</span>
+                            <span class="stat-value" id="tesseractCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">🏏 Paddle</span>
+                            <span class="stat-value" id="easyocrCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">🤖 Gemini</span>
+                            <span class="stat-value" id="geminiCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Pages Analyzed</span>
+                            <span class="stat-value" id="pagesAnalyzed">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Page Analysis Table -->
+                    <div class="complexity-table-wrapper">
+                        <table class="complexity-table" id="complexityTable">
+                            <thead>
+                                <tr>
+                                    <th>Page</th>
+                                    <th>Complexity</th>
+                                    <th>Engine</th>
+                                    <th>Features</th>
+                                    <th>Reason</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="complexityTableBody">
+                                <!-- Rows added dynamically by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Result Section -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <div class="result-card success" id="successCard" style="display: none;">
+                    <div class="result-icon success-icon">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                            <circle cx="32" cy="32" r="30" fill="#10b981" opacity="0.1" />
+                            <path d="M20 32l8 8 16-16" stroke="#10b981" stroke-width="3" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <h3>Conversion Successful!</h3>
+                    <p>Your files are ready to download</p>
+                    <div class="download-buttons">
+                        <a href="#" class="download-btn" id="downloadEpubBtn">
+                            <span>Download EPUB</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 3v10M6 9l4 4 4-4M3 17h14" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" />
+                            </svg>
+                        </a>
+                        <a href="#" class="download-btn mobi-btn" id="downloadMobiBtn" style="display: none;">
+                            <span>Download MOBI</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 3v10M6 9l4 4 4-4M3 17h14" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    <!-- Usage Report -->
+                    <div class="usage-report" id="usageReport">
+                        <h4>Engine Usage Report</h4>
+                        <div class="usage-report-grid">
+                            <div class="usage-report-item highlight">
+                                <span class="label">🏏 Paddle Pages:</span>
+                                <span class="value" id="reportPaddle">0</span>
+                            </div>
+                            <div class="usage-report-item">
+                                <span class="label">🔧 Tesseract Pages:</span>
+                                <span class="value" id="reportTesseract">0</span>
+                            </div>
+                            <div class="usage-report-item highlight">
+                                <span class="label">🤖 Gemini Rescue:</span>
+                                <span class="value" id="reportRescue">0</span>
+                            </div>
+                            <div class="usage-report-item">
+                                <span class="label">🤖 Gemini Direct:</span>
+                                <span class="value" id="reportDirect">0</span>
+                            </div>
+                            <div class="usage-report-item">
+                                <span class="label">🖼️ Image Only:</span>
+                                <span class="value" id="reportImage">0</span>
+                            </div>
+                            <div class="usage-report-item total">
+                                <span class="label">Total Pages:</span>
+                                <span class="value" id="reportTotal">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button class="convert-another-btn" id="convertAnotherBtn" style="flex: 1; margin: 0;">Convert Another File</button>
+                        <a href="#" class="convert-another-btn" id="correctBtn" style="flex: 1; margin: 0; background: #6366f1; color: white; text-decoration: none; display: flex; align-items: center; justify-content: center;">Review & Correct</a>
+                    </div>
+                </div>
+
+                <div class="result-card error" id="errorCard" style="display: none;">
+                    <div class="result-icon error-icon">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                            <circle cx="32" cy="32" r="30" fill="#ef4444" opacity="0.1" />
+                            <path d="M24 24l16 16M40 24L24 40" stroke="#ef4444" stroke-width="3"
+                                stroke-linecap="round" />
+                        </svg>
+                    </div>
+                    <h3>Conversion Failed</h3>
+                    <p id="errorMessage">An error occurred during conversion</p>
+                    <button class="convert-another-btn" id="tryAgainBtn">Try Again</button>
+                </div>
+            </section>
+            </div> <!-- End epub-tab -->
+
+            <div class="tab-content" id="pdf-tab">
+                <!-- PDF Advanced Tools Section -->
+            <section class="tools-section">
+                <div class="tools-card">
+                    <div class="tools-header">
+                        <div class="tools-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                                <path
+                                    d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6-3.8 3.8L11 11.6l-6.1 6.1a1 1 0 0 0 0 1.4l1.4 1.4a1 1 0 0 0 1.4 0l6.1-6.1 1.5 1.5 3.8-3.8 1.6 1.6a1 1 0 0 0 1.4 0l1.4-1.4a1 1 0 0 0 0-1.4l-3.5-3.5a1 1 0 0 0-1.4 0zM4.1 4.1a1 1 0 0 0 0 1.4l3.1 3.1 2.1-2.1-3.1-3.1a1 1 0 0 0-1.4 0z"
+                                    fill="url(#gradient-tools)" />
+                                <defs>
+                                    <linearGradient id="gradient-tools" x1="0" y1="0" x2="24" y2="24">
+                                        <stop offset="0%" stop-color="#667eea" />
+                                        <stop offset="100%" stop-color="#764ba2" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+                        <h3>PDF Advanced Tools</h3>
+                    </div>
+                    <p class="tools-description">Modify your PDF structure before conversion (split wide pages, reorder,
+                        rotate, etc.)</p>
+
+                    <form id="pdfToolsForm" enctype="multipart/form-data" class="tools-form">
+                        <div class="tools-form-grid">
+                            <div class="form-group">
+                                <label for="pdfFile">Select PDF File</label>
+                                <input type="file" id="pdfFile" name="file" accept=".pdf" required class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="pdfOperation">Operation</label>
+                                <select id="pdfOperation" name="operation" class="form-control"
+                                    onchange="toggleToolOptions()">
+                                    <option value="split_wide">Split Wide Pages (Double/Triple/Quad) → Portrait</option>
+                                    <option value="split">Split by Page Range (e.g., 1-10)</option>
+                                    <option value="remove">Remove Pages</option>
+                                    <option value="extract">Extract Pages</option>
+                                    <option value="reorder">Reorder Pages</option>
+                                    <option value="rotate">Rotate Pages</option>
+                                </select>
+                            </div>
+                            <div id="toolOptionsContainer" class="form-group full-width" style="display: none;">
+                                <label id="toolOptionsLabel" for="toolOptions">Options</label>
+                                <input type="text" id="toolOptions" name="options" class="form-control" placeholder="">
+                                <small id="toolOptionsHint" class="form-text text-muted"></small>
+                            </div>
+                            <div id="forceSplitContainer" class="form-group full-width">
+                                <label style="display: flex; align-items: center; gap: 8px; font-weight: normal;">
+                                    <input type="checkbox" id="assumeDoublePage" name="assume_double_page_spreads">
+                                    Every wide page is a double-page spread (split all, skip gutter detection)
+                                </label>
+                                <small class="form-text text-muted">Turn this on if some wide pages are being
+                                    left unsplit — worn/faint gutters or crease shadows can fool the automatic
+                                    spine check. Only use this when the whole file is genuine double-page scans
+                                    (not a mix with real wide single pages).</small>
+                            </div>
+                        </div>
+                        <button type="submit" class="tools-btn" id="toolsSubmitBtn">
+                            <span>Process PDF</span>
+                            <div class="btn-loader" style="display: none;"></div>
+                        </button>
+                    </form>
+                    <div id="toolsResult" class="tools-result" style="display: none;">
+                        <h4>Processing Complete!</h4>
+                        <div id="toolsDownloadLinks" class="download-links"></div>
+                    </div>
+                                <button type="submit" class="tools-btn" id="toolsSubmitBtn">
+                                    <span>Process PDF</span>
+                                    <div class="btn-loader" style="display: none;"></div>
+                                </button>
+                            </form>
+                            <div id="toolsResult" class="tools-result" style="display: none;">
+                                <h4>Processing Complete!</h4>
+                                <div id="toolsDownloadLinks" class="download-links"></div>
+                            </div>
+                        </div>
+                    </section>
+            </div> <!-- End pdf-tab -->
+
+            <div class="tab-content" id="repair-tab">
+                    <!-- Resume From Existing Results Folder Section -->
+                    <section class="tools-section" style="margin-top: 10px;">
+                        <div class="tools-card" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+                            <div class="tools-header">
+                                <div class="tools-icon" style="background: #0891b2;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                                        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <h3 style="color: white;">Resume a Previous Conversion</h3>
+                            </div>
+                            <p class="tools-description" style="color: #cbd5e1;">
+                                Already converted this book, and its data/temp/&lt;book&gt;_&lt;session&gt; folder still exists?
+                                Reopen it directly for review/editing/rebuild — no need to re-upload the PDF or EPUB, and it
+                                works even after this server was restarted (the "Book Repair" section below re-OCRs from
+                                scratch and needs the files re-uploaded; this reuses what's already saved).
+                            </p>
+
+                            <form id="resumeForm" enctype="multipart/form-data" class="tools-form">
+                                <div class="tools-form-grid">
+                                    <div class="form-group full-width">
+                                        <label for="resumeFolder" style="color: #e2e8f0;">Results folder name or path</label>
+                                        <input type="text" id="resumeFolder" name="folder" required class="form-control"
+                                               placeholder="e.g. Malayalam_Bhagavati_c1d5dae3 (or paste the full data/temp/... path)"
+                                               style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: white;">
+                                        <small style="color: #94a3b8; margin-top: 5px; display: block;">Look under data/temp/ for a folder named &lt;book title&gt;_&lt;8-character session id&gt;.</small>
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="resumePdf" style="color: #e2e8f0;">Original PDF (optional)</label>
+                                        <input type="file" id="resumePdf" name="pdf_file" accept=".pdf" class="form-control"
+                                               style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: white;">
+                                        <small style="color: #94a3b8; margin-top: 5px; display: block;">Not needed to view, edit, or rebuild — only needed if you want to use REWORK (re-OCR a page with a different engine). Saved with the results folder, so you only need to provide it once.</small>
+                                    </div>
+                                </div>
+                                <button type="submit" class="tools-btn" id="resumeSubmitBtn" style="background: #0891b2;">
+                                    <span>📂 Open for Review</span>
+                                    <div class="btn-loader" style="display: none;"></div>
+                                </button>
+                            </form>
+                            <div id="resumeResult" class="tools-result" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444;">
+                                <p id="resumeError" style="color: #f87171; margin: 0;"></p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Book Repair Specialist Section -->
+                    <section class="tools-section" style="margin-top: 30px; border-top: 2px solid rgba(102, 126, 234, 0.2); padding-top: 30px;">
+                        <div class="tools-card" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);">
+                            <div class="tools-header">
+                                <div class="tools-icon" style="background: #4338ca;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6-3.8 3.8L11 11.6l-6.1 6.1a1 1 0 0 0 0 1.4l1.4 1.4a1 1 0 0 0 1.4 0l6.1-6.1 1.5 1.5 3.8-3.8 1.6 1.6a1 1 0 0 0 1.4 0l1.4-1.4a1 1 0 0 0 0-1.4l-3.5-3.5a1 1 0 0 0-1.4 0z" fill="white" />
+                                    </svg>
+                                </div>
+                                <h3 style="color: white;">Book Repair Specialist</h3>
+                            </div>
+                            <p class="tools-description" style="color: #cbd5e1;">Surgeons for your eBooks. Fix specific pages without re-converting the whole book — re-uploads the PDF and re-OCRs the pages you specify from scratch (use "Resume a Previous Conversion" above instead if the original results folder still exists).</p>
+
+                            <form id="repairForm" enctype="multipart/form-data" class="tools-form">
+                                <div class="tools-form-grid">
+                                    <div class="form-group">
+                                        <label for="repairPdf" style="color: #e2e8f0;">1. Original PDF</label>
+                                        <input type="file" id="repairPdf" name="pdf_file" accept=".pdf" required class="form-control" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: white;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="repairEpub" style="color: #e2e8f0;">2. Existing EPUB</label>
+                                        <input type="file" id="repairEpub" name="epub_file" accept=".epub" required class="form-control" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: white;">
+                                        <small style="color: #94a3b8; margin-top: 5px; display: block;">EPUB only — a repaired MOBI will also be produced automatically if MOBI conversion is enabled.</small>
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="repairPages" style="color: #e2e8f0;">3. Pages to Repair (e.g., 5, 12, 50-60)</label>
+                                        <input type="text" id="repairPages" name="repair_pages" required class="form-control" placeholder="Identify the bad pages here" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: white;">
+                                        <small style="color: #94a3b8; margin-top: 5px; display: block;">We will only re-process these pages with High-Accuracy AI engines.</small>
+                                    </div>
+                                </div>
+                                <button type="submit" class="tools-btn" id="repairSubmitBtn" style="background: #4f46e5;">
+                                    <span>✨ Repair eBook</span>
+                                    <div class="btn-loader" style="display: none;"></div>
+                                </button>
+                            </form>
+                            <div id="repairResult" class="tools-result" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981;">
+                                <h4 style="color: #10b981;">Repair Complete!</h4>
+                                <div id="repairDownloadLinks" class="download-links"></div>
+                            </div>
+                        </div>
+                    </section>
+            </div> <!-- End repair-tab -->
+
+            <div class="tab-content" id="duplicate-tab">
+
+            <!-- ═══════════════════════════════════════════════ -->
+            <!-- FILE DUPLICATE FINDER SECTION                   -->
+            <!-- ═══════════════════════════════════════════════ -->
+            <section class="tools-section" id="dupFinderSection" style="margin-top:30px;border-top:2px solid rgba(99,102,241,0.25);padding-top:30px;">
+                <div class="tools-card" style="background:linear-gradient(135deg,#0f1729 0%,#1a1042 100%);border:1px solid rgba(99,102,241,0.35);">
+                    <div class="tools-header">
+                        <div class="tools-icon" style="background:#4f46e5;font-size:22px;display:flex;align-items:center;justify-content:center;">🔍</div>
+                        <h3 style="color:#e2e8f0;">File Duplicate Finder</h3>
+                    </div>
+                    <p class="tools-description" style="color:#94a3b8;">
+                        Recursively scan any folder to find duplicate files by name similarity &amp; size.
+                        Detects patterns like <code style="color:#818cf8;">file(1)</code>, <code style="color:#818cf8;">file-1</code>, <code style="color:#818cf8;">file(1)(1)</code> and more.
+                        Move duplicates and download a detailed report.
+                    </p>
+
+                    <!-- Input Row -->
+                    <div class="tools-form-grid" style="margin-top:18px;">
+                        <div class="form-group" style="flex:1;">
+                            <label for="dupFolderPath" style="color:#e2e8f0;">Folder Path to Scan</label>
+                            <input type="text" id="dupFolderPath" class="form-control"
+                                placeholder="e.g. C:\Users\navee\Documents"
+                                style="background:rgba(255,255,255,0.07);border-color:rgba(99,102,241,0.4);color:#e2e8f0;">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="dupDestFolder" style="color:#e2e8f0;">Move Duplicates To (optional)</label>
+                            <input type="text" id="dupDestFolder" class="form-control"
+                                placeholder="Leave empty for auto folder inside scanned path"
+                                style="background:rgba(255,255,255,0.07);border-color:rgba(99,102,241,0.4);color:#e2e8f0;">
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;align-items:center;">
+                        <button id="dupBrowseBtn" class="tools-btn" style="background:#0f766e;flex:1;min-width:160px;" onclick="dupBrowseTree()">
+                            <span>📂 Browse Folder Tree</span>
+                            <div class="btn-loader" id="dupBrowseLoader" style="display:none;"></div>
+                        </button>
+                        <button id="dupScanBtn" class="tools-btn" style="background:#4f46e5;flex:1;min-width:160px;" onclick="dupScan()">
+                            <span>🔍 Scan Duplicates</span>
+                            <div class="btn-loader" id="dupScanLoader" style="display:none;"></div>
+                        </button>
+                        <label style="color:#94a3b8;font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" id="dupDryRun" style="accent-color:#6366f1;">
+                            Dry Run (preview only, don't move)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ── FOLDER TREE PANEL ── -->
+                <div id="dupTreePanel" style="display:none;margin-top:16px;background:#111827;border:1px solid #1e3a2e;border-radius:12px;overflow:hidden;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#0d2018;border-bottom:1px solid #1e3a2e;">
+                        <span style="font-weight:600;color:#34d399;font-size:.9rem;">📂 Folder Structure</span>
+                        <div style="display:flex;align-items:center;gap:16px;font-size:.75rem;color:#94a3b8;">
+                            <span><span style="color:#34d399;">⭐</span> Original</span>
+                            <span><span style="color:#f87171;">❌</span> Duplicate</span>
+                            <span><span style="color:#94a3b8;">📄</span> File</span>
+                            <span><span style="color:#60a5fa;">📁</span> Folder</span>
+                        </div>
+                        <button onclick="document.getElementById('dupTreePanel').style.display='none'"
+                            style="background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;">✕</button>
+                    </div>
+                    <div id="dupTreeContent" style="padding:12px 16px;max-height:500px;overflow-y:auto;font-family:'Noto Sans Telugu','Segoe UI',monospace;font-size:.82rem;line-height:1.8;"></div>
+                </div>
+
+                <!-- Scan Summary -->
+                <div id="dupSummary" style="display:none;margin-top:16px;">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;">
+                        <div class="stat-card" id="dupStatTotal" style="background:#1a1d27;border:1px solid #2e3147;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#6366f1;" id="dupStatTotalVal">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Files Scanned</div>
+                        </div>
+                        <div class="stat-card" style="background:#1a1d27;border:1px solid #2e3147;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#ef4444;" id="dupStatGroups">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Duplicate Groups</div>
+                        </div>
+                        <div class="stat-card" style="background:#1a1d27;border:1px solid #2e3147;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#ef4444;" id="dupStatDups">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Duplicate Files</div>
+                        </div>
+                        <div class="stat-card" style="background:#1a1d27;border:1px solid #2e3147;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#f59e0b;" id="dupStatWasted">0 B</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Wasted Space</div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+                        <button id="dupMoveBtn" class="tools-btn" style="background:#dc2626;flex:1;min-width:180px;" onclick="dupMove()">
+                            <span id="dupMoveBtnLabel">📦 Move All Duplicates</span>
+                            <div class="btn-loader" id="dupMoveLoader" style="display:none;"></div>
+                        </button>
+                        <a id="dupReportHtml" href="#" class="tools-btn" style="background:#059669;flex:1;min-width:160px;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;" download>
+                            📄 Download HTML Report
+                        </a>
+                        <a id="dupReportCsv" href="#" class="tools-btn" style="background:#0369a1;flex:1;min-width:160px;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;" download>
+                            📊 Download CSV Report
+                        </a>
+                    </div>
+
+                    <!-- Move Result Banner -->
+                    <div id="dupMoveResult" style="display:none;padding:14px 18px;border-radius:10px;margin-bottom:16px;"></div>
+
+                    <!-- Results Table -->
+                    <div id="dupGroupsContainer" style="display:flex;flex-direction:column;gap:14px;"></div>
+                </div>
+            </section>
+            </div> <!-- End duplicate-tab -->
+
+            <div class="tab-content" id="search-copy-tab">
+            <!-- ═══════════════════════════════════════════════ -->
+            <!-- RECURSIVE FILE SEARCH & COPIER SECTION           -->
+            <!-- ═══════════════════════════════════════════════ -->
+            <section class="tools-section" id="fileSearchCopierSection" style="margin-top:30px;border-top:2px solid rgba(13,148,136,0.25);padding-top:30px;">
+                <div class="tools-card" style="background:linear-gradient(135deg,#0b1329 0%,#0d2229 100%);border:1px solid rgba(13,148,136,0.35);">
+                    <div class="tools-header">
+                        <div class="tools-icon" style="background:#0d9488;font-size:22px;display:flex;align-items:center;justify-content:center;">📂</div>
+                        <h3 style="color:#e2e8f0;">Recursive File Search &amp; Copier</h3>
+                    </div>
+                    <p class="tools-description" style="color:#94a3b8;">
+                        Recursively search for a word in file names inside a folder and copy matched files to another folder.
+                        Supports collision renaming, case sensitivity toggling, and dry run testing.
+                    </p>
+
+                    <!-- Inputs -->
+                    <div class="tools-form-grid" style="margin-top:18px;">
+                        <div class="form-group" style="flex:1; min-width:250px;">
+                            <label for="fscSourceFolder" style="color:#e2e8f0;">Source Folder Path to Scan</label>
+                            <input type="text" id="fscSourceFolder" class="form-control"
+                                placeholder="e.g. C:\Users\navee\Documents"
+                                style="background:rgba(255,255,255,0.07);border-color:rgba(13,148,136,0.4);color:#e2e8f0;">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:180px;">
+                            <label for="fscSearchWord" style="color:#e2e8f0;">Search Word in Filename</label>
+                            <input type="text" id="fscSearchWord" class="form-control"
+                                placeholder="e.g. telugu"
+                                style="background:rgba(255,255,255,0.07);border-color:rgba(13,148,136,0.4);color:#e2e8f0;">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:250px;">
+                            <label for="fscDestFolder" style="color:#e2e8f0;">Destination Folder Path</label>
+                            <input type="text" id="fscDestFolder" class="form-control"
+                                placeholder="e.g. C:\Users\navee\DestFolder"
+                                style="background:rgba(255,255,255,0.07);border-color:rgba(13,148,136,0.4);color:#e2e8f0;">
+                        </div>
+                    </div>
+
+                    <!-- Options & Buttons -->
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;align-items:center;">
+                        <button id="fscSearchBtn" class="tools-btn" style="background:#0d9488;flex:1;min-width:160px;" onclick="fscSearch()">
+                            <span>🔍 Search &amp; Preview</span>
+                            <div class="btn-loader" id="fscSearchLoader" style="display:none;"></div>
+                        </button>
+                        <button id="fscCopyBtn" class="tools-btn" style="background:#0284c7;flex:1;min-width:160px;" onclick="fscCopy()">
+                            <span>📋 Copy Matched Files</span>
+                            <div class="btn-loader" id="fscCopyLoader" style="display:none;"></div>
+                        </button>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                            <label style="color:#94a3b8;font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                                <input type="checkbox" id="fscCaseSensitive" style="accent-color:#0d9488;">
+                                Case Sensitive
+                            </label>
+                            <label style="color:#94a3b8;font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                                <input type="checkbox" id="fscRenameCollisions" checked style="accent-color:#0d9488;">
+                                Rename Collisions (append suffix)
+                            </label>
+                            <label style="color:#94a3b8;font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                                <input type="checkbox" id="fscDryRun" style="accent-color:#0d9488;">
+                                Dry Run (preview copy)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results & Table -->
+                <div id="fscResultsPanel" style="display:none;margin-top:16px;">
+                    <!-- Stats cards -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;">
+                        <div class="stat-card" style="background:#131d27;border:1px solid #1e2e3a;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#0d9488;" id="fscStatFound">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Files Found</div>
+                        </div>
+                        <div class="stat-card" style="background:#131d27;border:1px solid #1e2e3a;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#0284c7;" id="fscStatCopied">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Files Copied</div>
+                        </div>
+                        <div class="stat-card" style="background:#131d27;border:1px solid #1e2e3a;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#ef4444;" id="fscStatErrors">0</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Errors</div>
+                        </div>
+                        <div class="stat-card" style="background:#131d27;border:1px solid #1e2e3a;border-radius:10px;padding:14px;text-align:center;">
+                            <div style="font-size:1.7rem;font-weight:700;color:#f59e0b;" id="fscStatSize">0 B</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:3px;">Total Size</div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Banner -->
+                    <div id="fscCopyResultBanner" style="display:none;padding:14px 18px;border-radius:10px;margin-bottom:16px;"></div>
+
+                    <!-- Files Table -->
+                    <div class="complexity-table-wrapper" style="background:#111827;border:1px solid #1e2e3a;border-radius:12px;overflow:hidden;">
+                        <table class="complexity-table" id="fscTable" style="width:100%;border-collapse:collapse;font-size:.82rem;">
+                            <thead>
+                                <tr style="border-bottom:1px solid #1e2e3a; background:#16222f;">
+                                    <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Filename</th>
+                                    <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Source Folder</th>
+                                    <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Size</th>
+                                    <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Status / Target Path</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fscTableBody">
+                                <!-- Filled by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            </div> <!-- End search-copy-tab -->
+
+            <!-- Features Section -->
+            <div class="tab-content active" id="epub-features-tab">
+            <section class="features-section">
+                <h2>Powerful Features</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📄</div>
+                        <h3>Scanned PDF Support</h3>
+                        <p>Process scanned documents with high accuracy OCR</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔤</div>
+                        <h3>Telugu OCR</h3>
+                        <p>Advanced Telugu language recognition with Tesseract</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🤖</div>
+                        <h3>AI-Powered OCR</h3>
+                        <p>Gemini Vision API for complex pages with mixed content</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3>Table Detection</h3>
+                        <p>Automatically detect and preserve table structures</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🧠</div>
+                        <h3>Smart Pipeline</h3>
+                        <p>LangGraph orchestration with intelligent engine routing</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🖼️</div>
+                        <h3>Image Preservation</h3>
+                        <p>Extract and embed images in the EPUB output</p>
+                    </div>
+                    <div class="feature-card" style="border-color:rgba(99,102,241,0.4);background:linear-gradient(135deg,rgba(79,70,229,0.12),rgba(15,23,41,0.8));">
+                        <div class="feature-icon">🔍</div>
+                        <h3>Duplicate Finder</h3>
+                        <p>Find &amp; remove duplicate files across any folder — smart name matching included</p>
+                    </div>
+                </div>
+            </section>
+            </div> <!-- End epub-features-tab -->
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Built with ❤️ for Telugu readers | Powered by Tesseract OCR, Gemini Vision &amp; LangChain</p>
+        </footer>
+    </div> <!-- Close container -->
+    </div> <!-- Close main-wrapper -->
+    </div> <!-- Close app-layout -->
+
+    <!-- Status Modal -->
+    <div class="modal" id="statusModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>System Status</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="statusContent">
+                <div class="loading">Loading status...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1.1"></script>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- DUPLICATE FINDER JAVASCRIPT                     -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <script>
+    (function () {
+        'use strict';
+
+        let _dupScanId = null;
+
+        // ── BROWSE TREE ─────────────────────────────────
+        window.dupBrowseTree = async function (scanId) {
+            const folder = document.getElementById('dupFolderPath').value.trim();
+            if (!folder) { alert('Please enter a folder path first.'); return; }
+
+            setDupBtnLoading('browse', true);
+            try {
+                const res = await fetch('/duplicate/tree', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder_path: folder,
+                        scan_id: scanId || _dupScanId || '',
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Tree build failed');
+
+                const panel = document.getElementById('dupTreePanel');
+                const content = document.getElementById('dupTreeContent');
+                content.innerHTML = '';
+                content.appendChild(renderTree(data.tree, 0));
+                panel.style.display = 'block';
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                // Show content HTML saved notice
+                if (data.content_html_path) {
+                    showContentHtmlNotice(data.content_html_path);
+                }
+            } catch (e) {
+                alert('Tree error: ' + e.message);
+            } finally {
+                setDupBtnLoading('browse', false);
+            }
+        };
+
+        // Recursive tree renderer
+        function renderTree(node, depth) {
+            const wrap = document.createElement('div');
+            const indent = depth * 18;
+
+            if (node.type === 'dir') {
+                // ── Folder row ──
+                const row = document.createElement('div');
+                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:2px 0;padding-left:${indent}px;cursor:pointer;user-select:none;`;
+                const arrow = document.createElement('span');
+                arrow.textContent = '▾';
+                arrow.style.cssText = 'color:#60a5fa;font-size:.75rem;width:12px;flex-shrink:0;transition:transform .15s;';
+                const icon = document.createElement('span');
+                icon.textContent = '📁';
+                const name = document.createElement('span');
+                name.textContent = node.name;
+                name.style.cssText = 'color:#93c5fd;font-weight:600;font-family:"Noto Sans Telugu","Segoe UI",sans-serif;';
+                const size = document.createElement('span');
+                size.textContent = node.size_str;
+                size.style.cssText = 'color:#4b5563;font-size:.75rem;margin-left:6px;';
+                row.append(arrow, icon, name, size);
+
+                // Children container
+                const children = document.createElement('div');
+                children.id = 'tree-' + Math.random().toString(36).slice(2);
+                if (node.children && node.children.length) {
+                    node.children.forEach(child => children.appendChild(renderTree(child, depth + 1)));
+                } else {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = `padding-left:${indent + 20}px;color:#374151;font-size:.75rem;`;
+                    empty.textContent = '(empty)';
+                    children.appendChild(empty);
+                }
+
+                // Toggle collapse
+                let open = true;
+                row.addEventListener('click', () => {
+                    open = !open;
+                    children.style.display = open ? '' : 'none';
+                    arrow.style.transform = open ? '' : 'rotate(-90deg)';
+                });
+
+                wrap.appendChild(row);
+                wrap.appendChild(children);
+
+            } else {
+                // ── File row ──
+                const row = document.createElement('div');
+                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:1px 0;padding-left:${indent + 16}px;`;
+
+                let icon = '📄';
+                let nameColor = '#d1d5db';
+                let badge = '';
+
+                if (node.is_duplicate) {
+                    icon = '❌';
+                    nameColor = '#f87171';
+                    badge = ' <span style="background:rgba(220,38,38,0.2);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:0 6px;border-radius:99px;font-size:.65rem;font-weight:700;">DUP</span>';
+                } else if (node.is_original) {
+                    icon = '⭐';
+                    nameColor = '#34d399';
+                    badge = ' <span style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:0 6px;border-radius:99px;font-size:.65rem;font-weight:700;">ORIG</span>';
+                }
+
+                row.innerHTML = `
+                    <span style="flex-shrink:0;">${icon}</span>
+                    <span style="color:${nameColor};font-family:'Noto Sans Telugu','Segoe UI',monospace;">${escHtml(node.name)}${badge}</span>
+                    <span style="color:#374151;font-size:.75rem;margin-left:4px;">${node.size_str}</span>`;
+                wrap.appendChild(row);
+            }
+
+            return wrap;
+        }
+
+        // ── SCAN ────────────────────────────────────────
+        window.dupScan = async function () {
+            const folder = document.getElementById('dupFolderPath').value.trim();
+            if (!folder) { alert('Please enter a folder path to scan.'); return; }
+
+            setDupBtnLoading('scan', true);
+            document.getElementById('dupSummary').style.display = 'none';
+            document.getElementById('dupGroupsContainer').innerHTML = '';
+            document.getElementById('dupMoveResult').style.display = 'none';
+            _dupScanId = null;
+
+            try {
+                const res = await fetch('/duplicate/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_path: folder }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Scan failed');
+
+                _dupScanId = data.scan_id;
+                renderDupResults(data);
+
+                // Show content HTML notice
+                if (data.content_html_path) {
+                    showContentHtmlNotice(data.content_html_path);
+                }
+
+                // Auto-refresh tree with duplicate markers if tree is open
+                if (document.getElementById('dupTreePanel').style.display !== 'none') {
+                    dupBrowseTree(data.scan_id);
+                }
+            } catch (e) {
+                alert('Scan error: ' + e.message);
+            } finally {
+                setDupBtnLoading('scan', false);
+            }
+        };
+
+        // ── MOVE ────────────────────────────────────────
+        window.dupMove = async function () {
+            if (!_dupScanId) { alert('Please scan first.'); return; }
+            const dry = document.getElementById('dupDryRun').checked;
+            const dest = document.getElementById('dupDestFolder').value.trim() || null;
+            const confirm_msg = dry
+                ? 'Run DRY RUN — files will NOT be moved, just previewed. Continue?'
+                : 'This will MOVE all duplicate files to the destination folder. Continue?';
+            if (!confirm(confirm_msg)) return;
+
+            setDupBtnLoading('move', true);
+            try {
+                const res = await fetch('/duplicate/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scan_id: _dupScanId, dest_folder: dest, dry_run: dry }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Move failed');
+
+                const banner = document.getElementById('dupMoveResult');
+                if (dry) {
+                    banner.style.cssText = 'display:block;padding:14px 18px;border-radius:10px;margin-bottom:16px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;';
+                    banner.innerHTML = `🔍 <strong>Dry Run Complete</strong> — ${data.moved_count} file(s) <em>would</em> be moved. No files were actually moved.`;
+                } else {
+                    banner.style.cssText = 'display:block;padding:14px 18px;border-radius:10px;margin-bottom:16px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.4);color:#34d399;';
+                    banner.innerHTML = `✅ <strong>Done!</strong> ${data.moved_count} duplicate file(s) moved.` +
+                        (data.error_count ? ` ⚠️ ${data.error_count} error(s).` : '');
+                    (data.moved || []).forEach(m => {
+                        document.querySelectorAll(`[data-dup-path="${CSS.escape(m.source)}"]`).forEach(el => {
+                            el.style.opacity = '0.45';
+                            const b = el.querySelector('.dup-status-badge');
+                            if (b) { b.textContent = '📦 MOVED'; b.style.color = '#818cf8'; }
+                        });
+                    });
+                    // Refresh tree to reflect moved files
+                    if (document.getElementById('dupTreePanel').style.display !== 'none') {
+                        dupBrowseTree(_dupScanId);
+                    }
+                }
+            } catch (e) {
+                alert('Move error: ' + e.message);
+            } finally {
+                setDupBtnLoading('move', false);
+            }
+        };
+
+        // ── RENDER RESULTS ──────────────────────────────
+        function renderDupResults(data) {
+            document.getElementById('dupStatTotalVal').textContent = data.total_files;
+            document.getElementById('dupStatGroups').textContent = data.total_groups;
+            document.getElementById('dupStatDups').textContent = data.total_duplicate_files;
+            document.getElementById('dupStatWasted').textContent = data.wasted_str;
+            document.getElementById('dupSummary').style.display = 'block';
+
+            document.getElementById('dupReportHtml').href = `/duplicate/report/${data.scan_id}/html`;
+            document.getElementById('dupReportCsv').href = `/duplicate/report/${data.scan_id}/csv`;
+
+            const container = document.getElementById('dupGroupsContainer');
+            container.innerHTML = '';
+
+            if (!data.groups || data.groups.length === 0) {
+                container.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:1rem;">
+                    ✅ No duplicates found in the scanned folder!</div>`;
+                document.getElementById('dupMoveBtn').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('dupMoveBtn').style.display = '';
+
+            data.groups.forEach((g, idx) => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background:#1a1d27;border:1px solid #2e3147;border-radius:10px;overflow:hidden;';
+
+                const hdr = document.createElement('div');
+                hdr.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:#232635;border-bottom:1px solid #2e3147;';
+                hdr.innerHTML = `
+                    <span style="background:#6366f1;color:#fff;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:99px;">#${idx + 1}</span>
+                    <span style="font-weight:600;color:#e2e8f0;font-family:'Noto Sans Telugu','Segoe UI',sans-serif;">${escHtml(g.normalized_name + g.extension)}</span>
+                    <span style="font-size:.72rem;color:#94a3b8;background:#2e3147;padding:2px 8px;border-radius:99px;">${g.total_files} files</span>
+                    <span style="font-size:.78rem;color:#94a3b8;">📦 ${g.size_str} each</span>
+                    <span style="font-size:.78rem;color:#f59e0b;">🗑 ${g.wasted_str} wasted</span>`;
+                card.appendChild(hdr);
+
+                const tbl = document.createElement('table');
+                tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:.82rem;';
+                tbl.innerHTML = `<thead><tr style="border-bottom:1px solid #2e3147;">
+                    <th style="padding:9px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;width:36px;"></th>
+                    <th style="padding:9px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Filename</th>
+                    <th style="padding:9px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Location</th>
+                    <th style="padding:9px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Size</th>
+                    <th style="padding:9px 12px;text-align:left;color:#94a3b8;font-size:.7rem;text-transform:uppercase;">Status</th>
+                </tr></thead>`;
+                const tbody = document.createElement('tbody');
+
+                const origTr = document.createElement('tr');
+                origTr.style.cssText = 'background:rgba(5,150,105,0.06);border-bottom:1px solid #2e3147;';
+                origTr.innerHTML = `
+                    <td style="padding:9px 12px;text-align:center;">⭐</td>
+                    <td style="padding:9px 12px;font-weight:500;color:#e2e8f0;font-family:'Noto Sans Telugu','Segoe UI',sans-serif;">${escHtml(g.original.name)}</td>
+                    <td style="padding:9px 12px;color:#94a3b8;font-size:.75rem;word-break:break-all;">${escHtml(g.original.parent_dir)}</td>
+                    <td style="padding:9px 12px;white-space:nowrap;color:#94a3b8;">${g.original.size_str}</td>
+                    <td style="padding:9px 12px;"><span style="background:rgba(5,150,105,0.2);color:#10b981;border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:700;">ORIGINAL</span></td>`;
+                tbody.appendChild(origTr);
+
+                g.duplicates.forEach(d => {
+                    const tr = document.createElement('tr');
+                    tr.setAttribute('data-dup-path', d.path);
+                    tr.style.cssText = 'background:rgba(220,38,38,0.04);border-bottom:1px solid #2e3147;';
+                    tr.innerHTML = `
+                        <td style="padding:9px 12px;text-align:center;">📄</td>
+                        <td style="padding:9px 12px;font-weight:500;color:#e2e8f0;font-family:'Noto Sans Telugu','Segoe UI',sans-serif;">${escHtml(d.name)}</td>
+                        <td style="padding:9px 12px;color:#94a3b8;font-size:.75rem;word-break:break-all;" title="${escHtml(d.path)}">${escHtml(d.parent_dir)}</td>
+                        <td style="padding:9px 12px;white-space:nowrap;color:#94a3b8;">${d.size_str}</td>
+                        <td style="padding:9px 12px;"><span class="dup-status-badge" style="color:#ef4444;font-size:.78rem;font-weight:600;">Duplicate</span></td>`;
+                    tbody.appendChild(tr);
+                });
+
+                tbl.appendChild(tbody);
+                card.appendChild(tbl);
+                container.appendChild(card);
+            });
+        }
+
+        // ── HELPERS ─────────────────────────────────────
+        function setDupBtnLoading(btn, loading) {
+            const map = {
+                browse: ['dupBrowseBtn', 'dupBrowseLoader'],
+                scan:   ['dupScanBtn',   'dupScanLoader'],
+                move:   ['dupMoveBtn',   'dupMoveLoader'],
+            };
+            const [btnId, loaderId] = map[btn];
+            document.getElementById(btnId).disabled = loading;
+            document.getElementById(loaderId).style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g,'&amp;')
+                .replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;')
+                .replace(/"/g,'&quot;');
+        }
+
+        // ── CONTENT HTML NOTICE ─────────────────────────
+        function showContentHtmlNotice(filePath) {
+            // Remove any existing notice
+            const existing = document.getElementById('dupContentHtmlNotice');
+            if (existing) existing.remove();
+
+            const notice = document.createElement('div');
+            notice.id = 'dupContentHtmlNotice';
+            notice.style.cssText = `
+                display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+                padding:12px 18px;border-radius:10px;margin-top:12px;
+                background:rgba(5,150,105,0.12);border:1px solid rgba(16,185,129,0.35);
+                color:#34d399;font-size:.84rem;`;
+
+            // Convert Windows backslash path to file:// URL
+            const fileUrl = 'file:///' + filePath.replace(/\\/g, '/');
+
+            notice.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:1.2rem;">📄</span>
+                    <div>
+                        <div style="font-weight:600;margin-bottom:2px;">Content HTML saved!</div>
+                        <div style="font-size:.75rem;color:#94a3b8;font-family:monospace;word-break:break-all;">${escHtml(filePath)}</div>
+                    </div>
+                </div>
+                <a href="${escHtml(fileUrl)}" target="_blank"
+                   style="background:#059669;color:#fff;text-decoration:none;padding:6px 14px;
+                          border-radius:6px;font-size:.78rem;font-weight:600;white-space:nowrap;flex-shrink:0;">
+                    🌐 Open in Browser
+                </a>`;
+
+            // Insert it after the scan input card (before the tree panel)
+            const treePanel = document.getElementById('dupTreePanel');
+            treePanel.parentElement.insertBefore(notice, treePanel);
+        }
+
+        // ── FILE SEARCH AND COPIER JS ───────────────────
+        let _fscMatchedFiles = [];
+
+        window.fscSearch = async function () {
+            const source = document.getElementById('fscSourceFolder').value.trim();
+            const word = document.getElementById('fscSearchWord').value.trim();
+            const caseSensitive = document.getElementById('fscCaseSensitive').checked;
+
+            if (!source) { alert('Please enter a source folder path.'); return; }
+            if (!word) { alert('Please enter a search word.'); return; }
+
+            setFscBtnLoading('search', true);
+            document.getElementById('fscResultsPanel').style.display = 'none';
+            document.getElementById('fscCopyResultBanner').style.display = 'none';
+            _fscMatchedFiles = [];
+
+            try {
+                const res = await fetch('/api/file_search_copier/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_dir: source,
+                        query_word: word,
+                        case_sensitive: caseSensitive
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Search failed');
+
+                _fscMatchedFiles = data.files || [];
+                renderFscResults(data, 'found');
+            } catch (e) {
+                alert('Search error: ' + e.message);
+            } finally {
+                setFscBtnLoading('search', false);
+            }
+        };
+
+        window.fscCopy = async function () {
+            const source = document.getElementById('fscSourceFolder').value.trim();
+            const word = document.getElementById('fscSearchWord').value.trim();
+            const dest = document.getElementById('fscDestFolder').value.trim();
+            const dry = document.getElementById('fscDryRun').checked;
+            const renameCollisions = document.getElementById('fscRenameCollisions').checked;
+
+            if (!source) { alert('Please enter a source folder path.'); return; }
+            if (!word) { alert('Please enter a search word.'); return; }
+            if (!dest) { alert('Please enter a destination folder path.'); return; }
+
+            // If we haven't searched yet, or search results are empty/out-of-sync, we first run search
+            if (_fscMatchedFiles.length === 0) {
+                await fscSearch();
+                if (_fscMatchedFiles.length === 0) {
+                    alert('No files found to copy.');
+                    return;
+                }
+            }
+
+            const confirmMsg = dry
+                ? `Run DRY RUN copy of ${_fscMatchedFiles.length} file(s)?`
+                : `Copy ${_fscMatchedFiles.length} matched file(s) to "${dest}"?`;
+            if (!confirm(confirmMsg)) return;
+
+            setFscBtnLoading('copy', true);
+            try {
+                const res = await fetch('/api/file_search_copier/copy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        files: _fscMatchedFiles,
+                        dest_dir: dest,
+                        dry_run: dry,
+                        rename_collisions: renameCollisions
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Copy failed');
+
+                renderFscCopyResults(data);
+            } catch (e) {
+                alert('Copy error: ' + e.message);
+            } finally {
+                setFscBtnLoading('copy', false);
+            }
+        };
+
+        function renderFscResults(data, mode) {
+            document.getElementById('fscStatFound').textContent = data.count || 0;
+            document.getElementById('fscStatCopied').textContent = '0';
+            document.getElementById('fscStatErrors').textContent = '0';
+            
+            // Format size
+            let bytes = data.total_size_bytes || 0;
+            let sizeStr = '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let sizeVal = bytes;
+            let unitIdx = 0;
+            while (sizeVal >= 1024 && unitIdx < units.length - 1) {
+                sizeVal /= 1024;
+                unitIdx++;
+            }
+            sizeStr = `${sizeVal.toFixed(1)} ${units[unitIdx]}`;
+            document.getElementById('fscStatSize').textContent = sizeStr;
+
+            const tbody = document.getElementById('fscTableBody');
+            tbody.innerHTML = '';
+
+            if (!data.files || data.files.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#94a3b8;">
+                    No files found matching the search word.</td></tr>`;
+                document.getElementById('fscResultsPanel').style.display = 'block';
+                return;
+            }
+
+            data.files.forEach(f => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #1e2e3a';
+                tr.innerHTML = `
+                    <td style="padding:10px 12px;font-family:monospace;color:#e2e8f0;font-weight:500;">${escHtml(f.name)}</td>
+                    <td style="padding:10px 12px;color:#94a3b8;font-size:.78rem;word-break:break-all;">${escHtml(f.parent_dir)}</td>
+                    <td style="padding:10px 12px;color:#94a3b8;white-space:nowrap;">${escHtml(f.size_str)}</td>
+                    <td style="padding:10px 12px;" class="fsc-status-cell">
+                        <span style="color:#0d9488;background:rgba(13,148,136,0.15);border:1px solid rgba(13,148,136,0.3);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700;">FOUND</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('fscResultsPanel').style.display = 'block';
+            document.getElementById('fscResultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderFscCopyResults(data) {
+            document.getElementById('fscStatCopied').textContent = data.copied_count || 0;
+            document.getElementById('fscStatErrors').textContent = data.error_count || 0;
+
+            const banner = document.getElementById('fscCopyResultBanner');
+            if (data.dry_run) {
+                banner.style.cssText = 'display:block;padding:14px 18px;border-radius:10px;margin-bottom:16px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);color:#fbbf24;font-size:.85rem;';
+                banner.innerHTML = `🔍 <strong>Dry Run Complete</strong> — ${data.copied_count} file(s) would be copied. No files were actually copied.`;
+            } else {
+                banner.style.cssText = 'display:block;padding:14px 18px;border-radius:10px;margin-bottom:16px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.4);color:#34d399;font-size:.85rem;';
+                banner.innerHTML = `✅ <strong>Done!</strong> ${data.copied_count} file(s) copied.` +
+                    (data.error_count ? ` ⚠️ ${data.error_count} error(s) occurred.` : '');
+            }
+
+            const tbody = document.getElementById('fscTableBody');
+            tbody.innerHTML = '';
+
+            // Render copied files
+            data.copied.forEach(c => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #1e2e3a';
+                tr.style.background = 'rgba(16,185,129,0.04)';
+                
+                let badge = '';
+                if (c.dry_run) {
+                    badge = `<span style="color:#fbbf24;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700;">DRY MATCH</span>`;
+                } else if (c.collision_renamed) {
+                    badge = `<span style="color:#fbbf24;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700;">COPIED (RENAMED)</span>`;
+                } else {
+                    badge = `<span style="color:#10b981;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700;">COPIED</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td style="padding:10px 12px;font-family:monospace;color:#e2e8f0;font-weight:500;">
+                        ${escHtml(c.name)}
+                    </td>
+                    <td style="padding:10px 12px;color:#94a3b8;font-size:.78rem;word-break:break-all;">
+                        Source: ${escHtml(c.source)}
+                    </td>
+                    <td style="padding:10px 12px;color:#94a3b8;white-space:nowrap;">
+                        ${escHtml(c.size_str)}
+                    </td>
+                    <td style="padding:10px 12px;">
+                        <div style="display:flex;flex-direction:column;gap:4px;">
+                            <div>${badge}</div>
+                            <div style="font-size:.72rem;color:#64748b;word-break:break-all;">→ ${escHtml(c.dest)}</div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Render errored files
+            data.errors.forEach(e => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #1e2e3a';
+                tr.style.background = 'rgba(239,68,68,0.04)';
+                tr.innerHTML = `
+                    <td style="padding:10px 12px;font-family:monospace;color:#f87171;font-weight:500;">
+                        ${escHtml(e.source.split(/[\\/]/).pop())}
+                    </td>
+                    <td style="padding:10px 12px;color:#f87171;font-size:.78rem;word-break:break-all;">
+                        ${escHtml(e.source)}
+                    </td>
+                    <td style="padding:10px 12px;color:#f87171;white-space:nowrap;">—</td>
+                    <td style="padding:10px 12px;">
+                        <span style="color:#ef4444;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:700;">ERROR</span>
+                        <div style="font-size:.72rem;color:#f87171;margin-top:4px;">${escHtml(e.error)}</div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('fscCopyResultBanner').style.display = 'block';
+            document.getElementById('fscResultsPanel').style.display = 'block';
+        }
+
+        function setFscBtnLoading(btn, loading) {
+            const map = {
+                search: ['fscSearchBtn', 'fscSearchLoader'],
+                copy:   ['fscCopyBtn',   'fscCopyLoader'],
+            };
+            const [btnId, loaderId] = map[btn];
+            document.getElementById(btnId).disabled = loading;
+            document.getElementById(loaderId).style.display = loading ? 'inline-block' : 'none';
+        }
+    })();
+
+    // Tab switching and Sidebar Toggle logic
+    (function() {
+        const menuItems = document.querySelectorAll('.menu-item');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const sidebar = document.getElementById('sidebar');
+
+        menuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const targetTab = item.getAttribute('data-tab');
+
+                // Update active class on menu items
+                menuItems.forEach(mi => mi.classList.remove('active'));
+                item.classList.add('active');
+
+                // Update active class on tab contents
+                tabContents.forEach(tc => {
+                    if (tc.id === targetTab || (targetTab === 'epub-tab' && tc.id === 'epub-features-tab')) {
+                        tc.classList.add('active');
+                    } else {
+                        tc.classList.remove('active');
+                    }
+                });
+
+                // Auto-close sidebar on mobile
+                if (window.innerWidth <= 992) {
+                    sidebar.classList.remove('open');
+                }
+            });
+        });
+
+        // Toggle Sidebar on mobile
+        window.toggleSidebar = function() {
+            sidebar.classList.toggle('open');
+        };
+
+        // Close sidebar if clicking outside of it on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 992 && 
+                !sidebar.contains(e.target) && 
+                !e.target.closest('.sidebar-toggle-btn') && 
+                sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+            }
+        });
+    })();
+    </script>
+</body>
+
+</html>

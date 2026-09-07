@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/__init__.py
+src/config.py
+src/converter.py
+src/epub_builder.py
+src/ocr_engine.py
+src/pdf_processor.py
+src/text_cleaner.py
+src/teluguocr.egg-info/PKG-INFO
+src/teluguocr.egg-info/SOURCES.txt
+src/teluguocr.egg-info/dependency_links.txt
+src/teluguocr.egg-info/requires.txt
+src/teluguocr.egg-info/top_level.txt
+src/web/app.py

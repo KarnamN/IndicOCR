@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telugu PDF to EPUB Converter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Telugu PDF to EPUB Converter</h1>
+            <p class="subtitle">Convert scanned Telugu PDFs to reflowable EPUB ebooks with OCR</p>
+        </header>
+
+        <main>
+            <!-- Upload Section -->
+            <section id="upload-section" class="card">
+                <h2>Upload PDF</h2>
+                
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">📄</div>
+                    <p class="upload-text">Drag and drop your PDF here</p>
+                    <p class="upload-subtext">or</p>
+                    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                        Choose File
+                    </button>
+                    <input type="file" id="file-input" accept=".pdf" style="display: none;">
+                    <p class="upload-info">Maximum file size: 100 MB</p>
+                </div>
+
+                <div id="file-info" class="file-info" style="display: none;">
+                    <p><strong>Selected file:</strong> <span id="filename"></span></p>
+                    <p><strong>Size:</strong> <span id="filesize"></span></p>
+                </div>
+
+                <!-- Metadata Form -->
+                <form id="metadata-form" style="display: none;">
+                    <div class="form-group">
+                        <label for="title">Book Title</label>
+                        <input type="text" id="title" name="title" placeholder="Auto-detected from filename">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="author">Author</label>
+                        <input type="text" id="author" name="author" value="Unknown">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="language">Language</label>
+                            <select id="language" name="language">
+                                <option value="te" selected>Telugu</option>
+                                <option value="en">English</option>
+                                <option value="hi">Hindi</option>
+                                <option value="ta">Tamil</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="pages-per-chapter">Pages per Chapter</label>
+                            <input type="number" id="pages-per-chapter" name="pages_per_chapter" value="10" min="1" max="50">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success btn-large">
+                        🚀 Convert to EPUB
+                    </button>
+                </form>
+            </section>
+
+            <!-- Progress Section -->
+            <section id="progress-section" class="card" style="display: none;">
+                <h2>Conversion Progress</h2>
+                
+                <div class="progress-info">
+                    <p><strong>Status:</strong> <span id="status-text">Initializing...</span></p>
+                    <p><strong>Stage:</strong> <span id="stage-text">-</span></p>
+                </div>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <p class="progress-percentage" id="progress-percentage">0%</p>
+                </div>
+
+                <div class="progress-details">
+                    <p id="progress-details">Waiting to start...</p>
+                </div>
+            </section>
+
+            <!-- Result Section -->
+            <section id="result-section" class="card" style="display: none;">
+                <h2>✅ Conversion Complete!</h2>
+                
+                <div class="result-info">
+                    <p>Your EPUB file is ready for download.</p>
+                </div>
+
+                <div class="result-actions">
+                    <button class="btn btn-success btn-large" id="download-btn">
+                        ⬇️ Download EPUB
+                    </button>
+                    <button class="btn btn-secondary" id="convert-another-btn">
+                        🔄 Convert Another File
+                    </button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="error-section" class="card error-card" style="display: none;">
+                <h2>❌ Conversion Failed</h2>
+                
+                <div class="error-info">
+                    <p id="error-message"></p>
+                </div>
+
+                <button class="btn btn-secondary" id="try-again-btn">
+                    🔄 Try Again
+                    </button>
+            </section>
+        </main>
+
+        <footer>
+            <p>TeluguOCR PDF to EPUB Converter v1.0</p>
+            <p>Powered by Tesseract OCR</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

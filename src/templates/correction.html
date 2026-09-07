@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Correction Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 300px;
+            --header-height: 70px;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #f8fafc;
+            /* style.css (shared with the dark-themed main app) sets body { color:
+               #ffffff } — this page's own background is light, so without an
+               explicit override here, every element that doesn't set its own
+               color (e.g. the page-list numbers) inherits white-on-white and
+               becomes invisible. */
+            color: #1e293b;
+        }
+
+        .correction-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            padding-top: var(--header-height);
+        }
+
+        .correction-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            z-index: 100;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .page-item {
+            padding: 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .page-item:hover {
+            background: #f8fafc;
+        }
+
+        .page-item.active {
+            background: #eef2ff;
+            border-left: 4px solid #6366f1;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .status-ok { background: #10b981; }
+        .status-flagged { background: #f59e0b; }
+        .status-error { background: #ef4444; }
+
+        .filter-btn {
+            flex: 1;
+            padding: 0.4rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .filter-btn.active {
+            background: #6366f1;
+            border-color: #6366f1;
+            color: white;
+        }
+
+        .filter-btn:not(.active):hover {
+            background: #f1f5f9;
+        }
+
+        .empty-filter-message {
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        .main-editor {
+            flex: 1;
+            display: flex;
+            background: #f1f5f9;
+            /* Extra bottom padding reserves room for the floating .action-bar
+               (fixed, bottom: 2rem, ~3.6rem tall) so it doesn't sit on top of
+               content anchored to the pane's bottom edge — e.g. the last row
+               of the on-screen Telugu keyboard. */
+            padding: 1rem 1rem 6rem 1rem;
+            gap: 1rem;
+            overflow: hidden;
+        }
+
+        .view-pane {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pane-header {
+            padding: 0.75rem 1rem;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .image-viewer {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #334155;
+        }
+
+        .image-viewer img {
+            max-width: 100%;
+            height: auto;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        .text-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .text-editor textarea {
+            flex: 1;
+            border: none;
+            padding: 1.5rem;
+            font-family: 'Noto Sans Telugu', sans-serif;
+            font-size: 1.1rem;
+            line-height: 1.8;
+            resize: none;
+            outline: none;
+        }
+
+        .action-bar {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
+            background: white;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: #4f46e5;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        #saveStatus {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        /* Telugu on-screen keyboard */
+        .telugu-keyboard {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            padding: 0.75rem 1rem;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .telugu-keyboard.open {
+            display: flex;
+        }
+
+        .kb-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .kb-row-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            width: 100%;
+            margin-top: 2px;
+        }
+
+        .kb-key {
+            font-family: 'Noto Sans Telugu', sans-serif;
+            font-size: 1.1rem;
+            min-width: 34px;
+            height: 34px;
+            padding: 0 4px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .kb-key:hover {
+            background: #eef2ff;
+            border-color: #6366f1;
+        }
+
+        .kb-key:active {
+            background: #6366f1;
+            color: white;
+        }
+
+        .kb-key.kb-wide {
+            min-width: 48px;
+        }
+
+        .kb-toggle-btn.active {
+            background: #6366f1;
+            color: white;
+            border-color: #6366f1;
+        }
+    </style>
+</head>
+<body>
+    <header class="correction-header">
+        <div class="logo-area" style="display: flex; align-items: center; gap: 10px;">
+            <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                <rect width="48" height="48" rx="8" fill="#6366f1" />
+                <path d="M14 18h20M14 24h20M14 30h14" stroke="white" stroke-width="3" stroke-linecap="round" />
+            </svg>
+            <h2 style="margin: 0; font-size: 1.25rem;">OCR Correction Dashboard</h2>
+        </div>
+        <div class="job-info">
+            Job ID: <span id="jobIdLabel" style="font-family: monospace; font-weight: 600;">{{ job_id }}</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                <button class="btn btn-primary" id="rebuildBtn" onclick="rebuildBook()" style="background: #059669;"
+                        title="Builds the EPUB/MOBI now using whatever is currently saved — you don't need to review every flagged page first.">BUILD EBOOK</button>
+                <span style="font-size: 0.7rem; color: #64748b;">Builds the ebook(s) with your current changes</span>
+            </div>
+            <button class="btn" onclick="window.location.href='/'">Return Home</button>
+        </div>
+    </header>
+
+    <div class="correction-container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header" style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="filter-toggle" id="filterToggle" style="display: flex; gap: 4px;">
+                    <button type="button" class="filter-btn active" data-filter="flagged" onclick="setPageFilter('flagged')">
+                        ⚠️ Flagged <span id="filterCountFlagged">(0)</span>
+                    </button>
+                    <button type="button" class="filter-btn" data-filter="all" onclick="setPageFilter('all')">
+                        All <span id="filterCountAll">(0)</span>
+                    </button>
+                </div>
+            </div>
+            <div id="pageList">
+                <div style="padding: 2rem; text-align: center; color: #94a3b8;">Loading pages...</div>
+            </div>
+        </div>
+
+        <main class="main-editor">
+            <!-- Image Pane -->
+            <div class="view-pane">
+                <div class="pane-header">
+                    <span>Original Page Image</span>
+                    <span id="pageLabel">—</span>
+                </div>
+                <div class="image-viewer" id="imageViewer">
+                    <div style="color: #cbd5e1;">Select a page to view</div>
+                </div>
+            </div>
+
+            <!-- Editor Pane -->
+            <div class="view-pane">
+                <div class="pane-header">
+                    <span>OCR Text Editor (Telugu)</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <select id="engineSelect" class="btn" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; height: 24px;">
+                            <option value="gemini">Gemini (Cloud)</option>
+                            <option value="google_vision">Google Vision</option>
+                            <option value="tesseract">Tesseract</option>
+                        </select>
+                        <button class="btn" id="reworkBtn" onclick="reworkCurrentPage()" style="padding: 2px 8px; font-size: 0.75rem; background: #6366f1; color: white; border: none; height: 24px;">REWORK</button>
+                        <button class="btn kb-toggle-btn" id="kbToggleBtn" onclick="toggleTeluguKeyboard()" title="Telugu on-screen keyboard" style="padding: 2px 8px; font-size: 0.75rem; height: 24px;">⌨ తె</button>
+                        <div id="engineLabel" style="font-size: 0.75rem; background: #eceff1; padding: 2px 8px; border-radius: 4px; color: #455a64;">Engine: —</div>
+                    </div>
+                </div>
+                <div id="correctionsPanel" style="display: none; padding: 0.5rem 1rem; background: #fffbeb; border-bottom: 1px solid #fde68a; font-size: 0.8rem;"></div>
+                <div class="text-editor" style="position: relative;">
+                    <div id="reworkOverlay" class="loading-overlay" style="display: none; flex-direction: column; gap: 10px;">
+                        <div class="spinner"></div>
+                        <div style="color: #6366f1; font-weight: 600;">AI is reworking the page...</div>
+                    </div>
+                    <textarea id="editor" placeholder="Start typing..."></textarea>
+                    <div class="telugu-keyboard" id="teluguKeyboard"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="action-bar">
+        <span id="saveStatus">No unsaved changes</span>
+        <button class="btn" onclick="prevPage()">PREV</button>
+        <button class="btn" onclick="nextPage()">NEXT</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="saveCurrentPage()">SAVE CHANGES</button>
+    </div>
+
+    <script>
+        const JOB_ID = "{{ job_id }}";
+        let currentPage = null;
+        let pages = [];
+        let hasChanges = false;
+        let currentFilter = 'flagged'; // 'flagged' | 'all' — see setPageFilter()
+
+        function visiblePages() {
+            return currentFilter === 'flagged' ? pages.filter(p => p.status === 'flagged') : pages;
+        }
+
+        function setPageFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(b =>
+                b.classList.toggle('active', b.dataset.filter === filter));
+            renderPageList();
+
+            // If the page currently open isn't in the new filtered view, jump to
+            // the first page that is (or clear the editor if the filter is empty).
+            const visible = visiblePages();
+            if (!visible.some(p => p.page_num === currentPage)) {
+                if (visible.length > 0) {
+                    loadPage(visible[0].page_num);
+                } else {
+                    currentPage = null;
+                    document.getElementById('editor').value = '';
+                    document.getElementById('pageLabel').innerText = '—';
+                    document.getElementById('imageViewer').innerHTML = '<div style="color: #cbd5e1;">No pages match this filter</div>';
+                    renderCorrectionsPanel([], false);
+                }
+            }
+        }
+
+        async function init() {
+            try {
+                const response = await fetch(`/api/correction/pages/${JOB_ID}`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                pages = data.pages;
+
+                const flaggedCount = pages.filter(p => p.status === 'flagged').length;
+                document.getElementById('filterCountFlagged').innerText = `(${flaggedCount})`;
+                document.getElementById('filterCountAll').innerText = `(${pages.length})`;
+                // Default to the flagged view when there's actually something flagged —
+                // jump straight to the pages that need attention rather than making
+                // you scroll through everything to find them. Nothing flagged? Just
+                // show all pages, there's nothing to filter to.
+                currentFilter = flaggedCount > 0 ? 'flagged' : 'all';
+                document.querySelectorAll('.filter-btn').forEach(b =>
+                    b.classList.toggle('active', b.dataset.filter === currentFilter));
+
+                renderPageList();
+                renderPendingReviewBanner(data.pending_review_count || 0);
+
+                // Check for 'page' param in URL to jump to specific page
+                const urlParams = new URLSearchParams(window.location.search);
+                const startPage = parseInt(urlParams.get('page'));
+                const visible = visiblePages();
+
+                if (startPage && pages.some(p => p.page_num === startPage)) {
+                    // Explicit deep link always wins, even if that page wouldn't
+                    // normally show under the default filter — switch to "all" so
+                    // it's actually visible in the sidebar too.
+                    if (!visible.some(p => p.page_num === startPage)) setPageFilter('all');
+                    loadPage(startPage);
+                } else if (visible.length > 0) {
+                    loadPage(visible[0].page_num);
+                } else if (pages.length > 0) {
+                    loadPage(pages[0].page_num);
+                }
+            } catch (err) {
+                alert("Failed to load pages: " + err.message);
+            }
+        }
+
+        function renderPendingReviewBanner(count) {
+            let banner = document.getElementById('pendingReviewBanner');
+            if (count <= 0) {
+                if (banner) banner.remove();
+                return;
+            }
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'pendingReviewBanner';
+                banner.style.cssText = "position: fixed; top: 78px; left: 50%; transform: translateX(-50%); background: #fef3c7; color: #92400e; padding: 0.6rem 1.25rem; border-radius: 8px; border: 1px solid #fde68a; z-index: 150; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 10px; max-width: 90vw;";
+                document.body.appendChild(banner);
+            }
+            // The prose alone ("click BUILD EBOOK") wasn't a strong enough cue that
+            // building now, without reviewing every flagged page, is a valid and
+            // supported action — add a direct button doing exactly that.
+            banner.innerHTML = `<span>⚠️ ${count} page(s) have automatic spell-corrections awaiting your review (shown below by default). You don't have to review every page first — BUILD EBOOK builds with your current changes.</span>` +
+                `<button type="button" onclick="rebuildBook()" style="flex-shrink: 0; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 6px; border: none; background: #059669; color: white; cursor: pointer; white-space: nowrap;">Build Ebook Now</button>`;
+        }
+
+        function renderPageList() {
+            const container = document.getElementById('pageList');
+            const visible = visiblePages();
+
+            document.getElementById('filterCountFlagged').innerText =
+                `(${pages.filter(p => p.status === 'flagged').length})`;
+            document.getElementById('filterCountAll').innerText = `(${pages.length})`;
+
+            if (visible.length === 0) {
+                container.innerHTML = `<div class="empty-filter-message">✓ No flagged pages — everything's been reviewed. Click "All" to browse every page.</div>`;
+                return;
+            }
+
+            container.innerHTML = visible.map(p => `
+                <div class="page-item ${currentPage === p.page_num ? 'active' : ''}"
+                     onclick="loadPage(${p.page_num})" id="item-${p.page_num}">
+                    <div class="status-dot status-${p.status}"></div>
+                    <div>Page ${p.page_num}</div>
+                    <div style="margin-left: auto; font-size: 0.7rem; color: #94a3b8;">${p.needs_review ? `⚠️ ${p.correction_count}` : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadPage(pageNum) {
+            if (hasChanges && !confirm("You have unsaved changes. Continue without saving?")) return;
+            
+            currentPage = pageNum;
+            hasChanges = false;
+            document.getElementById('saveStatus').innerText = "No unsaved changes";
+            
+            // Highlight in sidebar
+            document.querySelectorAll('.page-item').forEach(el => el.classList.remove('active'));
+            const activeItem = document.getElementById(`item-${pageNum}`);
+            if (activeItem) activeItem.classList.add('active');
+
+            // Show loading
+            document.getElementById('editor').value = "Loading page data...";
+            document.getElementById('pageLabel').innerText = `Page ${pageNum}`;
+
+            try {
+                const response = await fetch(`/api/correction/page/${JOB_ID}/${pageNum}`);
+                const data = await response.json();
+
+                document.getElementById('editor').value = data.text;
+                document.getElementById('engineLabel').innerText = `Engine: ${data.engine.toUpperCase()}`;
+
+                if (data.image) {
+                    document.getElementById('imageViewer').innerHTML = `<img src="data:image/jpeg;base64,${data.image}" />`;
+                } else {
+                    document.getElementById('imageViewer').innerHTML = `<div style="color: white;">No image available</div>`;
+                }
+
+                renderCorrectionsPanel(data.dictionary_corrections || [], data.needs_manual_review);
+            } catch (err) {
+                alert("Error loading page: " + err.message);
+            }
+        }
+
+        function renderCorrectionsPanel(corrections, needsReview) {
+            const panel = document.getElementById('correctionsPanel');
+            if (!corrections.length) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+                return;
+            }
+            panel.style.display = 'block';
+            const items = corrections.map(c =>
+                `<span style="font-family:'Noto Sans Telugu',sans-serif; margin-right: 14px;">
+                    <s style="color:#b45309;">${c.from}</s> → <strong>${c.to}</strong>
+                </span>`
+            ).join('');
+            const reviewNote = needsReview
+                ? `<div style="margin-bottom: 4px; font-weight: 600; color: #92400e;">⚠️ Auto-corrected — please review, then click SAVE CHANGES:</div>`
+                : `<div style="margin-bottom: 4px; color: #059669;">✓ Reviewed</div>`;
+            panel.innerHTML = reviewNote + items;
+        }
+
+        async function reworkCurrentPage() {
+            if (!currentPage) return;
+            if (!confirm(`Rework Page ${currentPage} with ${document.getElementById('engineSelect').value}? Current text will be replaced.`)) return;
+
+            const overlay = document.getElementById('reworkOverlay');
+            const engine = document.getElementById('engineSelect').value;
+            
+            overlay.style.display = 'flex';
+
+            try {
+                const response = await fetch(`/api/correction/rework/${JOB_ID}/${currentPage}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ engine })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('editor').value = data.text;
+                    document.getElementById('engineLabel').innerText = `Engine: ${data.engine.toUpperCase()}`;
+                    hasChanges = true;
+                    document.getElementById('saveStatus').innerText = "Unsaved changes (Reworked)";
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (err) {
+                alert("Rework failed: " + err.message);
+            } finally {
+                overlay.style.display = 'none';
+            }
+        }
+
+        async function rebuildBook() {
+            if (hasChanges) {
+                alert("Please save your current page changes before building the book.");
+                return;
+            }
+
+            const btn = document.getElementById('rebuildBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "BUILDING...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/correction/rebuild/${JOB_ID}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert("Ebook built successfully with your current changes! You can now download it from the home page or via the buttons below.");
+                    
+                    // Show download links
+                    const resultsHtml = `
+                        <div style="margin-top: 10px; display: flex; gap: 5px;">
+                            <a href="${data.epub_url}" class="btn btn-primary" style="background: #2563eb;">Download EPUB</a>
+                            ${data.mobi_url ? `<a href="${data.mobi_url}" class="btn btn-primary" style="background: #e11d48;">Download MOBI</a>` : ''}
+                        </div>
+                    `;
+                    
+                    // Show a persistent success message
+                    const msg = document.createElement('div');
+                    msg.style.cssText = "position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: #dcfce7; color: #166534; padding: 1rem 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; align-items: center; gap: 10px; border: 1px solid #bbf7d0;";
+                    msg.innerHTML = `<strong>✨ Book Updated Successfully!</strong> ${resultsHtml} <button class="btn" onclick="this.parentElement.remove()" style="margin-top: 10px; font-size: 0.75rem;">Dismiss</button>`;
+                    document.body.appendChild(msg);
+                    
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (err) {
+                alert("Rebuild failed: " + err.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function saveCurrentPage() {
+            if (!currentPage) return;
+            
+            const btn = document.getElementById('saveBtn');
+            const status = document.getElementById('saveStatus');
+            const text = document.getElementById('editor').value;
+            
+            btn.disabled = true;
+            status.innerText = "Saving...";
+
+            try {
+                const response = await fetch(`/api/correction/save/${JOB_ID}/${currentPage}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    status.innerText = "All changes saved!";
+                    hasChanges = false;
+                    const savedPage = currentPage;
+                    // Update status dot in sidebar — saving also marks the page
+                    // as reviewed (needs_review cleared server-side)
+                    const item = pages.find(p => p.page_num === savedPage);
+                    if (item) {
+                        item.status = 'ok';
+                        item.needs_review = false;
+                    }
+                    renderPageList();
+                    // Recompute the pending-review banner from the updated local list
+                    renderPendingReviewBanner(pages.filter(p => p.needs_review).length);
+
+                    // Review-queue flow: in the flagged filter, a just-reviewed page
+                    // drops out of view — jump straight to the next one so reviewing
+                    // is click-SAVE-repeat rather than click-SAVE-then-hunt-for-next.
+                    const stillVisible = visiblePages().some(p => p.page_num === savedPage);
+                    if (currentFilter === 'flagged' && !stillVisible) {
+                        const next = visiblePages()[0];
+                        if (next) {
+                            loadPage(next.page_num);
+                        } else {
+                            currentPage = null;
+                            document.getElementById('editor').value = '';
+                            document.getElementById('pageLabel').innerText = '—';
+                            document.getElementById('imageViewer').innerHTML = '<div style="color: #cbd5e1;">🎉 All flagged pages reviewed!</div>';
+                            renderCorrectionsPanel([], false);
+                        }
+                    } else {
+                        // Re-render the corrections panel's "Reviewed" state without a refetch
+                        const panel = document.getElementById('correctionsPanel');
+                        if (panel.style.display !== 'none' && panel.innerHTML) {
+                            const note = panel.querySelector('div');
+                            if (note) {
+                                note.style.color = '#059669';
+                                note.style.fontWeight = '600';
+                                note.innerText = '✓ Reviewed';
+                            }
+                        }
+                    }
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (err) {
+                alert("Save failed: " + err.message);
+                status.innerText = "Save failed!";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function nextPage() {
+            const visible = visiblePages();
+            const idx = visible.findIndex(p => p.page_num === currentPage);
+            if (idx < visible.length - 1) loadPage(visible[idx + 1].page_num);
+        }
+
+        function prevPage() {
+            const visible = visiblePages();
+            const idx = visible.findIndex(p => p.page_num === currentPage);
+            if (idx > 0) loadPage(visible[idx - 1].page_num);
+        }
+
+        // Track changes
+        document.getElementById('editor').addEventListener('input', () => {
+            if (!hasChanges) {
+                hasChanges = true;
+                document.getElementById('saveStatus').innerText = "Unsaved changes";
+            }
+        });
+
+        // Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                saveCurrentPage();
+            }
+        });
+
+        // ── Telugu on-screen keyboard ──────────────────────────────────────
+        // Grouped the same way TeluguTextProcessor's Unicode tables are
+        // (src/telugu_text_processor.py): independent vowels, consonants,
+        // vattulu (conjunct/subscript consonant forms — virama + consonant,
+        // rendered by the font as a subscript glyph), dependent vowel signs
+        // (matras, wide keys since they only make sense attached after a
+        // consonant), virama, then common punctuation.
+        const TELUGU_KEYBOARD_ROWS = [
+            { label: 'Vowels', keys: ['అ','ఆ','ఇ','ఈ','ఉ','ఊ','ఋ','ఎ','ఏ','ఐ','ఒ','ఓ','ఔ','అం','అః'] },
+            { label: 'Consonants', keys: ['క','ఖ','గ','ఘ','ఙ','చ','ఛ','జ','ఝ','ఞ','ట','ఠ','డ','ఢ','ణ',
+                                            'త','థ','ద','ధ','న','ప','ఫ','బ','భ','మ','య','ర','ల','వ',
+                                            'శ','ష','స','హ','ళ','క్ష','ఱ'] },
+            { label: 'Vattulu (conjunct form, insert after a consonant)', keys: ['్క','్ఖ','్గ','్ఘ','్ఙ','్చ','్ఛ','్జ','్ఝ','్ఞ','్ట','్ఠ','్డ','్ఢ','్ణ',
+                                            '్త','్థ','్ద','్ధ','్న','్ప','్ఫ','్బ','్భ','్మ','్య','్ర','్ల','్వ',
+                                            '్శ','్ష','్స','్హ','్ళ','్ఱ'], wide: true },
+            { label: 'Matras (attach after a consonant)', keys: ['ా','ి','ీ','ు','ూ','ృ','ె','ే','ై','ొ','ో','ౌ','్','ం','ః','ఁ'], wide: true },
+            { label: 'Punctuation / digits', keys: ['।','॥','ఽ','౦','౧','౨','౩','౪','౫','౬','౭','౮','౯'] },
+        ];
+
+        function buildTeluguKeyboard() {
+            const container = document.getElementById('teluguKeyboard');
+            container.innerHTML = TELUGU_KEYBOARD_ROWS.map(row => `
+                <div class="kb-row-label">${row.label}</div>
+                <div class="kb-row">
+                    ${row.keys.map(k => `<button type="button" class="kb-key${row.wide ? ' kb-wide' : ''}" onclick="insertTeluguChar('${k}')">${k}</button>`).join('')}
+                </div>
+            `).join('');
+        }
+
+        function toggleTeluguKeyboard() {
+            const kb = document.getElementById('teluguKeyboard');
+            const btn = document.getElementById('kbToggleBtn');
+            kb.classList.toggle('open');
+            btn.classList.toggle('active', kb.classList.contains('open'));
+        }
+
+        function insertTeluguChar(ch) {
+            const editor = document.getElementById('editor');
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            editor.value = editor.value.slice(0, start) + ch + editor.value.slice(end);
+            const newPos = start + ch.length;
+            editor.focus();
+            editor.setSelectionRange(newPos, newPos);
+            // Reuse the same 'input' event path as typing, so hasChanges tracking fires
+            editor.dispatchEvent(new Event('input'));
+        }
+
+        buildTeluguKeyboard();
+        init();
+    </script>
+</body>
+</html>

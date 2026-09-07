@@ -1,0 +1,123 @@
+# Enhanced Telugu OCR - Architecture & Logical Flow
+
+This document outlines the high-level architecture, module interactions, and the precise logical flow of the advanced OCR system.
+
+## 1. High-Level Architecture Overview
+
+The system is built as a Flask-based web application with a real-time WebSocket connection to the frontend. It uses a **multi-tiered OCR approach**, orchestrated by **LangGraph**, to intelligently parse complex scanned documents efficiently.
+
+```mermaid
+graph TD
+    %% Define Styles
+    classDef frontend fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
+    classDef engine fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff
+    classDef store fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+
+    UI[Web UI / Dashboard]:::frontend <-->|REST & WebSockets| Server[Flask API Server]:::backend
+    Server --> Config[Config Module]
+    Server --> Controller[Conversion Controller]:::backend
+
+    Controller --> PDF[PDF to Image Converter]
+    Controller --> Tracker[Progress & State Tracker]
+    
+    PDF --> Orchestrator[LangGraph Orchestrator]:::backend
+    Orchestrator --> Analyzer[Page Complexity Analyzer]
+    
+    Orchestrator -->|Low Complexity| Tess[Tesseract Engine]:::engine
+    Orchestrator -->|Medium Complexity / Tables| Easy[EasyOCR Engine]:::engine
+    Orchestrator -->|Extreme Complexity / Fallback| Gemini[Gemini Vision API]:::engine
+
+    Tess --> EPUB[EPUB & MOBI Generator]:::store
+    Easy --> EPUB
+    Gemini --> EPUB
+    
+    Tracker <-->|Real-time Updates| UI
+    EPUB -->|Download Link| UI
+```
+
+---
+
+## 2. The LangGraph Orchestration Flow
+
+At the core of the project is the [LangGraphOCRPipeline](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/langchain_ocr_pipeline.py#63-466), which acts as an intelligent router for every single page in the PDF. Instead of blindly sending every page to a single engine, it evaluates the layout and routes to the most optimal engine, complete with fallback mechanisms.
+
+```mermaid
+stateDiagram-v2
+    [*] --> AnalyzePage
+    
+    AnalyzePage --> RouteEngine: Page Complexity Computed
+    
+    RouteEngine --> TesseractOCR: Simple Text Layout (Score < 30)
+    RouteEngine --> EasyOCR: Tables / High Density Layout (Score 30-80)
+    RouteEngine --> GeminiOCR: Extremely Complex Layout (Score > 80)
+    
+    TesseractOCR --> EvaluateResult
+    EasyOCR --> EvaluateResult
+    GeminiOCR --> EvaluateResult
+    
+    EvaluateResult --> Success: High Confidence Result
+    
+    EvaluateResult --> RouteFallback: Low Confidence / Error / Junk
+    
+    RouteFallback --> TesseractOCR: Fallback 1
+    RouteFallback --> EasyOCR: Fallback 2
+    RouteFallback --> GeminiOCR: Premium Fallback 3
+    
+    RouteFallback --> Failed: All Engines Exhausted
+    
+    Success --> PostProcess
+    Failed --> PostProcess
+    
+    PostProcess --> [*]: Return Extracted Data
+```
+
+---
+
+## 3. Detailed Processing Lifecycle
+
+When you drop a PDF into the web UI, here is exactly what happens under the hood step-by-step:
+
+### Phase 1: Initialization ([app.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/app.py) & [pdf_to_epub_converter_optimized_v2.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/pdf_to_epub_converter_optimized_v2.py))
+1. **Upload & Setup**: The PDF is uploaded and saved temporarily. A unique `job_id` is generated.
+2. **Analysis Init**: The PDF is split into images. Using `pdf2image`, each page gets converted to a high-resolution PIL Image.
+
+### Phase 2: Page Analysis ([page_complexity_analyzer.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/page_complexity_analyzer.py))
+For each specific image, the [PageComplexityAnalyzer](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/page_complexity_analyzer.py#14-369) runs computer vision heuristics (OpenCV):
+- **Edge Density**: Determines the general noise and text density.
+- **Component Counting**: Identifies distinct "blocks" on the screen (headers, paragraphs).
+- **Table Detection**: Looks for horizontal/vertical grid lines indicating a table.
+- **Illustration Detection**: Applies grayscale variance checks to find charts/pictures embedded in the text.
+- **Outcome**: A single "Complexity Score" (0-100) is generated alongside a structured layout dictionary mapping out text vs. image zones.
+
+### Phase 3: Engine Routing ([langchain_ocr_pipeline.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/langchain_ocr_pipeline.py) & [ocr_factory.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/ocr_factory.py))
+Using the outcome from Phase 2, the [LangGraphOCRPipeline](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/langchain_ocr_pipeline.py#63-466) assigns the page to a worker node:
+- **Tesseract**: Lightning-fast, optimized with native Telugu ([tel](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/gemini_ocr_processor.py#208-211)) data. Sent here when the page is mostly simple text. We mask out any detected illustrations with white bounding boxes before processing to prevent junk character hallucination.
+- **EasyOCR**: Deep-learning based. Sent here when complex multicolumn layouts or strict tables are detected, as EasyOCR preserves bounding boxes much more accurately.
+- **Gemini Vision**: The "Premium AI" engine. Sent here when the page exceeds a specific threshold (e.g., severe noise, deeply mixed text and images) or when the previous two fail to extract recognizable language.
+
+### Phase 4: Data Consolidation & EPUB Generation
+1. **Cleanup**: Text strings are normalized. Repeating page-headers or footers are stripped using regex.
+2. **HTML Generation**: Each page's text is converted into an HTML chapter.
+3. **Image Insertion**: If the [PageComplexityAnalyzer](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/page_complexity_analyzer.py#14-369) found partial-page illustrations or full-page diagrams, those precise bounding boxes are cropped from the original image and embedded back into the HTML as `<img src="base64...">`.
+4. **Assembly**: Using `ebooklib`, the HTML chapters, manifest, styles (`index.css`), and metadata are compiled into a reflowable `.epub`.
+5. **MOBI Conversion**: If Calibre/kindlegen is installed, [mobi_converter.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/mobi_converter.py) natively transforms the final EPUB to MOBI format.
+
+### Phase 5: UI Stream Notification
+Throughout this entire lifecycle, the `Flask-SocketIO` connection emits JSON payloads back to the [main.js](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/static/js/main.js) controller. This populates the frontend **Progress Bar** and the **Page Complexity Dashboard Table** in real-time, giving users complete transparency into what the AI is analyzing.
+
+---
+
+## 4. Core Component Responsibilities
+
+| Component | File Location | Responsibility |
+| :--- | :--- | :--- |
+| **Flask API Server** | [src/app.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/app.py) | Routes REST requests, coordinates WebSockets, and manages the lifecycle of conversion jobs in background threads. |
+| **Global Config** | [src/config.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/config.py) | Centralized settings for thresholds, API keys, Tesseract paths, default DPIs, and debugging toggles. |
+| **LangChain Pipeline** | [src/langchain_ocr_pipeline.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/langchain_ocr_pipeline.py) | State graph definition for conditional engine routing and fallback error handling. |
+| **OCR Factory** | [src/ocr_factory.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/ocr_factory.py) | Factory pattern that dynamically initializes the required OCR class `TesseractProcessor`, `EasyOCRProcessor`, or [GeminiOCRProcessor](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/gemini_ocr_processor.py#19-219). |
+| **Gemini OCR Proc.** | [src/gemini_ocr_processor.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/gemini_ocr_processor.py) | Rate-limited, robust handler for translating page images into structured text via Google's Vision API. |
+| **Complexity Analyzer**| [src/page_complexity_analyzer.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/page_complexity_analyzer.py)| OpenCV-based document layout analyzer that locates tables, images, and column layouts. |
+| **EPUB Converter** | [src/pdf_to_epub_converter_optimized_v2.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/pdf_to_epub_converter_optimized_v2.py)| The core master-loop. Converts PDFs to images, invokes the pipeline per page, and writes the `.epub` file out. |
+| **MOBI Converter** | [src/mobi_converter.py](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/mobi_converter.py) | Wrapper for Calibre's `ebook-convert` CLI, automatically upgrading the final EPUB to MOBI format. |
+| **Web UI** | [src/templates/index.html](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/templates/index.html) & [static/js/main.js](file:///mnt/c/Workspace/Antigravity_workspace/Latest_OCR/Myocr_New_08-02-2026/src/static/js/main.js)| Dark themed dynamic front-end using drag-and-drop, real-time SocketIO listeners, and data dashboarding. |

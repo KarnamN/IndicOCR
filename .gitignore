@@ -1,0 +1,51 @@
+# ── Secrets — never commit ───────────────────────────────────────────────
+.env
+json/*.json
+
+# ── Virtual environments ─────────────────────────────────────────────────
+venv/
+wenv/
+myenv/
+
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+*.log.*
+job_slice_tmp.log
+
+# ── Old backups / archives ───────────────────────────────────────────────
+backup_pre_perf_opt_20260509/
+backup_pre_restructure_20260703/
+archive_reference/
+
+# ── Runtime data (uploads, cached OCR output — large, not source) ────────
+data/
+
+# ── Run artifacts / scratch output ───────────────────────────────────────
+outputs/
+ocr_comparison/
+test_results/
+test_telugu_folder/
+scratch/
+report.json
+report.txt
+context.txt
+text.txt
+
+# ── Regenerable build artifacts ──────────────────────────────────────────
+resources/telugu_dictionary/te_wordlist.symspell_cache.pkl
+
+# ── Converted book output (real content, not source — 5.5MB stray sample) ─
+docs/archive/Kalyana Jataka Vishleshana.epub
+*.epub
+
+# ── Debug/test page screenshots (some are real scanned book pages) ───────
+images/
+
+# ── OS / editor cruft ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
