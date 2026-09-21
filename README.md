@@ -1,222 +1,105 @@
-# PDF to EPUB/MOBI Converter with Telugu Support
+# IndicOCR
 
-A comprehensive PDF to EPUB/MOBI converter with OCR support, Telugu language handling, and folder scanning utilities.
+IndicOCR converts scanned Telugu and mixed Telugu/English PDFs into reflowable EPUB files, with optional MOBI output. It combines PP-OCRv5, Tesseract, layout analysis, Telugu post-processing, and a Flask web interface for long-running conversions.
 
-## 🌟 Key Features
+## Features
 
-- **PDF to EPUB Conversion** - Convert scanned PDFs to EPUB format
-- **OCR Support** - Extract text from images using Tesseract OCR
-- **Telugu Language** - Full support for Telugu text recognition and filename translation
-- **Table Detection** - Automatically detect and extract tables from PDFs
-- **MOBI Conversion** - Optional EPUB to MOBI conversion using Calibre
-- **Web Interface** - User-friendly web UI for easy conversions
-- **Folder Scanner** - Recursively scan folders with Telugu filename translation
-- **Large PDF Support** - Optimized processing for large PDF files
+- Telugu and English OCR with automatic fallback and quality checks
+- PDF to EPUB conversion with image preservation
+- Optional MOBI conversion through Calibre
+- Double-page splitting, column-aware OCR, table and illustration handling
+- Real-time conversion progress through Flask-SocketIO
+- Folder scanning and Telugu filename transliteration utilities
+- Repair and resume workflows for interrupted or low-quality conversions
 
-## 📁 Project Structure
+## Requirements
 
-```
-Chatbot/
-├── src/           # Source code
-├── tests/         # Tests and demos
-├── docs/          # Documentation
-├── scripts/       # Utility scripts
-├── utils/         # Configuration files
-└── data/          # Data directories (uploads, outputs, temp)
-```
+- Python 3.10 or newer
+- Linux or WSL is recommended for PP-OCRv5 and PaddleX
+- Tesseract OCR with Telugu and English language data
+- Poppler utilities for PDF rendering
+- Calibre is optional and only required for MOBI output
 
-See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for detailed structure.
+Windows is supported for development and Tesseract-primary operation. See
+[`requirements-windows.txt`](requirements-windows.txt) and [`docs/WSL_FIX_GUIDE.md`](docs/WSL_FIX_GUIDE.md).
 
-## 🚀 Quick Start
+## Installation
 
-### Prerequisites
+### Linux or WSL
 
-- Python 3.8+
-- Tesseract OCR
-- Poppler utilities
-- Calibre (optional, for MOBI conversion)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   cd /mnt/c/Workspace/Antigravity_workspace/Chatbot
-   ```
-
-2. **Install Python dependencies**
-   ```bash
-   pip install -r utils/requirements.txt
-   ```
-
-3. **Install system dependencies**
-   
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt-get update
-   sudo apt-get install tesseract-ocr tesseract-ocr-tel poppler-utils
-   ```
-   
-   **For MOBI support (optional):**
-   ```bash
-   sudo apt-get install calibre
-   ```
-
-### Running the Application
-
-#### Web Interface
 ```bash
-python3 src/app.py
+sudo apt update
+sudo apt install tesseract-ocr tesseract-ocr-tel tesseract-ocr-eng poppler-utils
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
-Then open your browser to: `http://localhost:5001`
 
-#### Folder Scanner (CLI)
+For MOBI output, also install `calibre`. Paddle models are downloaded by PaddleX on first use.
+
+### Windows
+
+```powershell
+py -3.10 -m venv wenv
+wenv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements-windows.txt
+```
+
+Install Tesseract separately and make sure it is available in `PATH`, or configure its path in [`src/config.py`](src/config.py).
+
+## Configuration
+
+Copy [`.env.example`](.env.example) to `.env` when using optional cloud OCR providers. Never commit `.env` or service-account JSON files.
+
+## Run
+
+From the repository root:
+
 ```bash
-python3 src/folder_scanner.py /path/to/folder -o report.txt
+python src/app.py
 ```
 
-#### Large PDF Converter (CLI)
+Open <http://localhost:5001>. On Windows, `start.bat` creates a virtual environment and starts the server. On Linux or WSL, `scripts/start.sh` performs dependency and OCR pre-flight checks before starting it.
+
+Useful command-line entry points:
+
 ```bash
-python3 scripts/convert_large_pdf.py input.pdf output.epub
+python scripts/convert_large_pdf.py input.pdf output.epub
+python src/folder_scanner.py /path/to/folder -o report.txt
 ```
 
-## 📖 Documentation
+## Project Layout
 
-- **[Setup Guide](docs/guides/SETUP_GUIDE.md)** - Detailed installation instructions
-- **[Usage Examples](docs/guides/USAGE_EXAMPLES.md)** - How to use the converter
-- **[Folder Scanner Guide](docs/guides/FOLDER_SCANNER_GUIDE.md)** - Folder scanning tool
-- **[Architecture](docs/guides/ARCHITECTURE.md)** - System architecture overview
-- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Directory organization
-- **[WSL Setup](docs/guides/WSL_UBUNTU_SETUP.md)** - Windows Subsystem for Linux setup
-
-## 🎯 Main Features
-
-### 1. PDF to EPUB Conversion
-Convert scanned PDFs to EPUB format with OCR:
-- Automatic text extraction
-- Image preservation
-- Table detection
-- Telugu language support
-
-### 2. Telugu Support
-- **OCR**: Recognize Telugu text in PDFs
-- **Filename Translation**: Automatically translate Telugu filenames to English
-- **Unicode**: Full Unicode support
-
-### 3. Folder Scanner
-Recursively scan folders and generate reports:
-- Detect Telugu filenames
-- Translate to English
-- Generate text and JSON reports
-- File statistics and summaries
-
-### 4. Web Interface
-User-friendly web UI:
-- Drag-and-drop file upload
-- Real-time progress tracking
-- Download converted files
-- Configurable settings
-
-## 🔧 Configuration
-
-Edit `src/config.py` to customize:
-- Output directories
-- OCR settings (language, DPI)
-- Processing options
-- Web server settings
-
-## 📊 Examples
-
-### Telugu Filename Translation
-```
-Input:  తెలుగు_పుస్తకం.pdf
-Output: telugu_pustakam.epub
-        telugu_pustakam.mobi
+```text
+src/       Flask app, OCR engines, conversion pipeline, templates, and static files
+scripts/   Batch conversion, benchmarking, setup, and maintenance utilities
+tests/     Focused regression and installation checks
+docs/      Architecture, setup, repair, and OCR quality notes
+data/      Runtime uploads, temporary files, and generated output (ignored by Git)
 ```
 
-### Folder Scanning
+The processing pipeline and current engine routing are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Tests
+
 ```bash
-python3 src/folder_scanner.py ~/Documents -o inventory.txt -p
+python tests/test_filename_utils.py
+python tests/test_transliteration.py
+python tests/test_border_detection.py
 ```
 
-Output includes:
-- File counts and sizes
-- Telugu filename translations
-- Directory structure
-- File type statistics
+Run [`tests/test_installation.py`](tests/test_installation.py) after installing Tesseract, Poppler, and the Python dependencies to validate the complete local environment.
 
-## 🧪 Testing
+## Privacy and Generated Files
 
-Run tests to verify installation:
-```bash
-python3 tests/test_installation.py
-python3 tests/test_filename_utils.py
-```
+Uploaded PDFs, OCR output, logs, model caches, credentials, and scratch data are excluded by [`.gitignore`](.gitignore).
 
-Run demo:
-```bash
-python3 tests/demo_folder_scanner.py
-```
+## Documentation
 
-## 📝 Requirements
-
-### Python Packages
-See `utils/requirements.txt`:
-- Flask
-- PyMuPDF
-- pdf2image
-- pytesseract
-- Pillow
-- opencv-python
-- numpy
-- pandas
-- ebooklib
-- flask-socketio
-
-### System Requirements
-- **Tesseract OCR** - Text recognition
-- **Poppler** - PDF processing
-- **Calibre** - MOBI conversion (optional)
-
-## 🌐 Supported Languages
-
-- Telugu (tel)
-- English (eng)
-- Mixed Telugu + English (tel+eng)
-
-## 📄 License
-
-[Add your license here]
-
-## 👥 Contributors
-
-[Add contributors here]
-
-## 🐛 Troubleshooting
-
-See documentation in `docs/guides/`:
-- [Installation Issues](docs/guides/INSTALLATION_FIX.md)
-- [WSL Hanging Solution](docs/guides/WSL_HANGING_SOLUTION.md)
-- [OCR Quality Fixes](docs/guides/OCR_QUALITY_FIXES.md)
-- [Large PDF Guide](docs/guides/LARGE_PDF_GUIDE.md)
-
-## 📞 Support
-
-For issues and questions:
-1. Check the documentation in `docs/guides/`
-2. Run `python3 tests/test_installation.py` to verify setup
-3. Check logs in `converter.log`
-
-## 🎉 Recent Updates
-
-- ✅ Reorganized project structure
-- ✅ Added folder scanner with Telugu translation
-- ✅ Improved Telugu transliteration
-- ✅ Simplified output filenames
-- ✅ Custom output directory support
-- ✅ Comprehensive documentation
-
----
-
-**Version**: 2.0 (Reorganized)  
-**Last Updated**: 2025-11-23  
-**Status**: Active Development
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/PDF_TOOLS.md`](docs/PDF_TOOLS.md)
+- [`docs/CORRECTION_AND_REPAIR.md`](docs/CORRECTION_AND_REPAIR.md)
+- [`docs/SKIP_PAGES.md`](docs/SKIP_PAGES.md)
+- [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md)
