@@ -568,7 +568,11 @@ class OptimizedPDFToEPUBConverter:
                     text = gemini_proc.extract_text(image, page_label=f"[{page_label}]")
                 return text, len(text.strip()) == 0, 'gemini'
             
-            if engine == 'paddle' and hasattr(processor, 'extract_with_fallback'):
+            # 'fusion' (src/fusion_ocr_processor.py, config.ENABLE_FUSION_OCR) shares
+            # PaddleV5Processor's extract_with_fallback() contract, so it takes the
+            # same branch -- see docs/CURRENT_STATE.md, "Configuration-Driven OCR
+            # Engine Selection".
+            if engine in ('paddle', 'fusion') and hasattr(processor, 'extract_with_fallback'):
                 result = processor.extract_with_fallback(image, preprocess=True, psm=psm, page_label=page_label)
                 return result.get('text', ''), len(result.get('text', '').strip()) == 0, result.get('engine', 'paddle')
             
@@ -737,8 +741,21 @@ class OptimizedPDFToEPUBConverter:
             
             # Calculate zoom based on DPI (72 is default PDF DPI)
             zoom = self.dpi / 72
+
+            # Some scan-to-PDF tools declare a page box in points 1:1 with the source
+            # image's pixel count instead of converting through a real scan DPI, so a
+            # normal-looking page can claim to be 40-50+ "inches" wide. Found 2026-09-25
+            # on a real book: DPI-based zoom alone rendered pages at 175-327 megapixels
+            # each. Cap the rendered side instead of trusting the page box blindly --
+            # MAX_RENDER_DIM is generous enough that real large physical pages (up to
+            # ~17.5in at 400dpi, e.g. A3) are unaffected; it only kicks in for this
+            # mis-declared-page-box case.
+            MAX_RENDER_DIM = 7000
+            render_w, render_h = page.rect.width * zoom, page.rect.height * zoom
+            if max(render_w, render_h) > MAX_RENDER_DIM:
+                zoom *= MAX_RENDER_DIM / max(render_w, render_h)
             mat = fitz.Matrix(zoom, zoom)
-            
+
             # Get pixmap
             pix = page.get_pixmap(matrix=mat, alpha=False)
             
@@ -1082,7 +1099,20 @@ class OptimizedPDFToEPUBConverter:
                                         angles.append(angle)
                             if angles:
                                 median_angle = np.median(angles)
-                                if abs(median_angle) > 0.3:
+                                # Threshold raised from 0.3 to 1.5, 2026-09-25: found live that
+                                # 0.3 is far too sensitive on dense Telugu text -- Hough lines
+                                # picked up from character strokes (not the real page edge) on a
+                                # genuinely straight page produced a spurious 0.53 degree "tilt"
+                                # from 137 detected lines. Rotating a straight page by even that
+                                # small an angle still resamples (BICUBIC) every character, which
+                                # reproduced the exact confidently-wrong, single-letter-substitution
+                                # misreads seen in a real book page (see
+                                # ocr_comparison/No616_page15/NOTES.md) -- this "correction" was
+                                # actively causing the OCR errors it was meant to prevent. A real,
+                                # visible scan tilt is normally well above 1 degree; 1.5 is a
+                                # conservative floor so genuinely skewed pages are still corrected.
+                                DESKEW_MIN_ANGLE = 1.5
+                                if abs(median_angle) > DESKEW_MIN_ANGLE:
                                     ocr_image = ocr_image.rotate(-median_angle,
                                         resample=Image.Resampling.BICUBIC,
                                         expand=False, fillcolor=(255, 255, 255))

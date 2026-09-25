@@ -6,61 +6,113 @@ echo "Enhanced Telugu OCR with Vatulu & Guninthalu Detection"
 echo "========================================"
 echo ""
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+# ── Clean stale Python bytecode caches (the mvn-clean equivalent) ────────────
+# A shared/reused venv + edited .py files can leave stale __pycache__/*.pyc
+# around; Python usually invalidates these by mtime/hash on its own, but this
+# guarantees a clean slate on every launch, same intent as `mvn clean`.
+echo "Cleaning stale __pycache__ / .pyc files..."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+for d in src tests scripts IndicPhotoOCR; do
+    [ -d "$PROJECT_ROOT/$d" ] || continue
+    find "$PROJECT_ROOT/$d" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+    find "$PROJECT_ROOT/$d" -type f -name "*.pyc" -delete 2>/dev/null
+done
+echo ""
+
+# ── Prefer the shared venv (paddleocr + torch + IndicPhotoOCR + tesseract, ────
+# already fully set up by scripts/setup_shared_ocr_venv.sh) over creating a
+# separate ./venv from plain requirements.txt. requirements.txt alone does not
+# include torch/transformers/IndicPhotoOCR — a ./venv built from it can run
+# PP-OCRv5+Tesseract fine, but config.ENABLE_FUSION_OCR's IndicPhotoOCR pass
+# would silently be unavailable (FusionOCRProcessor catches the ImportError and
+# keeps going without it, so nothing crashes — it just quietly loses the
+# feature). Falls back to the old ./venv behavior if the shared venv isn't set
+# up yet, so this stays backward compatible.
+SHARED_VENV="$HOME/venvs/ocr-common"
+if [ -f "$SHARED_VENV/bin/activate" ]; then
+    echo "Using shared venv: $SHARED_VENV (has IndicPhotoOCR — see scripts/setup_shared_ocr_venv.sh)"
+    source "$SHARED_VENV/bin/activate"
     if [ $? -ne 0 ]; then
-        echo "Error: Failed to create virtual environment"
-        echo "Please ensure Python 3 is installed and in PATH"
+        echo "Error: Failed to activate shared virtual environment"
         read -p "Press Enter to exit..."
         exit 1
     fi
-    echo "Virtual environment created successfully"
+    VENV_DIR="$SHARED_VENV"
+else
+    echo "Shared venv not found at $SHARED_VENV — falling back to a local ./venv"
+    echo "(run scripts/setup_shared_ocr_venv.sh once to get IndicPhotoOCR support here too)"
     echo ""
-fi
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source venv/bin/activate
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to activate virtual environment"
-    read -p "Press Enter to exit..."
-    exit 1
+    # Check if virtual environment exists
+    if [ ! -d "venv" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv venv
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to create virtual environment"
+            echo "Please ensure Python 3 is installed and in PATH"
+            read -p "Press Enter to exit..."
+            exit 1
+        fi
+        echo "Virtual environment created successfully"
+        echo ""
+    fi
+
+    # Activate virtual environment
+    echo "Activating virtual environment..."
+    source venv/bin/activate
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to activate virtual environment"
+        read -p "Press Enter to exit..."
+        exit 1
+    fi
+    VENV_DIR="venv"
 fi
 
 # ── Dependency check with stamp-file cache ───────────────────────────────────
 # We only re-run pip install when requirements.txt has actually changed.
 # The stamp file stores the last-modified time of requirements.txt.
-STAMP_FILE="venv/.deps_stamp"
+# Skipped entirely for the shared venv -- that one is managed by
+# setup_shared_ocr_venv.sh, not by pip install -r requirements.txt here.
+STAMP_FILE="$VENV_DIR/.deps_stamp"
 REQ_FILE="requirements.txt"
 
-needs_install=false
-if [ ! -f "$STAMP_FILE" ]; then
-    needs_install=true
-elif [ "$REQ_FILE" -nt "$STAMP_FILE" ]; then
-    echo "requirements.txt changed — re-checking dependencies..."
-    needs_install=true
-fi
-
-if [ "$needs_install" = true ]; then
-    echo "Checking dependencies..."
-    if ! pip show flask > /dev/null 2>&1 || ! pip show pytesseract > /dev/null 2>&1; then
-        echo "Dependencies missing or incomplete. Installing..."
-        pip install --upgrade pip -q
-        pip install -r requirements.txt -q
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to install dependencies"
-            read -p "Press Enter to exit..."
-            exit 1
-        fi
-        echo "Dependencies installed successfully"
-        echo ""
-    fi
-    # Write stamp (touch it to match requirements.txt mtime)
-    touch -r "$REQ_FILE" "$STAMP_FILE" 2>/dev/null || touch "$STAMP_FILE"
+if [ "$VENV_DIR" = "$SHARED_VENV" ]; then
+    # The shared venv is managed by setup_shared_ocr_venv.sh, which installs
+    # PaddleOCR, then IndicPhotoOCR, then deliberately strips any CUDA torch
+    # pulled in transitively and installs CPU-only torch LAST (see its own
+    # comments and docs/CURRENT_STATE.md). `pip install -r requirements.txt`
+    # here has no such ordering and could silently clobber that pin. If a
+    # package is genuinely missing from the shared venv, re-run
+    # scripts/setup_shared_ocr_venv.sh instead of installing into it here.
+    echo "Dependencies: managed by scripts/setup_shared_ocr_venv.sh, not checked here ✓"
 else
-    echo "Dependencies OK (cached) ✓"
+    needs_install=false
+    if [ ! -f "$STAMP_FILE" ]; then
+        needs_install=true
+    elif [ "$REQ_FILE" -nt "$STAMP_FILE" ]; then
+        echo "requirements.txt changed — re-checking dependencies..."
+        needs_install=true
+    fi
+
+    if [ "$needs_install" = true ]; then
+        echo "Checking dependencies..."
+        if ! pip show flask > /dev/null 2>&1 || ! pip show pytesseract > /dev/null 2>&1; then
+            echo "Dependencies missing or incomplete. Installing..."
+            pip install --upgrade pip -q
+            pip install -r requirements.txt -q
+            if [ $? -ne 0 ]; then
+                echo "Error: Failed to install dependencies"
+                read -p "Press Enter to exit..."
+                exit 1
+            fi
+            echo "Dependencies installed successfully"
+            echo ""
+        fi
+        # Write stamp (touch it to match requirements.txt mtime)
+        touch -r "$REQ_FILE" "$STAMP_FILE" 2>/dev/null || touch "$STAMP_FILE"
+    else
+        echo "Dependencies OK (cached) ✓"
+    fi
 fi
 
 

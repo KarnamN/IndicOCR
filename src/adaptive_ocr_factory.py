@@ -106,6 +106,7 @@ class AdaptiveOCRFactory:
             "gemini":       "🚀",
             "google_vision":"💎",
             "easyocr":      "🧠",
+            "fusion":       "🧩",
         }
         icon = icons.get(engine_to_use, "🤖")
         logger.info(f"{icon} OCR Engine: {engine_to_use.upper()} | Complexity: {complexity:.1f} | Type: {page_type or 'standard'}")
@@ -134,6 +135,16 @@ class AdaptiveOCRFactory:
                                 is_enabled = PADDLEOCR_AVAILABLE
                             except ImportError:
                                 is_enabled = False
+                    # NOTE: 'fusion' deliberately has no is_enabled gate here (unlike
+                    # 'paddle'/'gemini'/'google_vision' above) -- the generic
+                    # fallback a few lines down would send it to Tesseract when
+                    # disabled, throwing away PP-OCRv5 entirely. Instead
+                    # OCRFactory._create_fusion (ocr_factory.py) does its own
+                    # config.ENABLE_FUSION_OCR check and falls back to plain
+                    # PaddleV5Processor internally when off -- the better default
+                    # for "the experimental extra stage is disabled" than dropping
+                    # to Tesseract. See docs/CURRENT_STATE.md, "Configuration-Driven
+                    # OCR Engine Selection".
                     elif engine == 'google_vision':
                         # Check both config AND package availability
                         try:

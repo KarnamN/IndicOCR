@@ -43,6 +43,8 @@ class OCRFactory:
             return OCRFactory._create_paddle(language, **kwargs)
         elif engine == 'hybrid':
             return OCRFactory._create_hybrid(language, **kwargs)
+        elif engine == 'fusion':
+            return OCRFactory._create_fusion(language, **kwargs)
         elif engine == 'gemini':
             return OCRFactory._create_gemini(language, **kwargs)
         elif engine == 'google_vision' or engine == 'google':
@@ -145,6 +147,26 @@ class OCRFactory:
         except Exception as e:
             logger.warning(f"PP-OCRv5 unavailable ({e}) — using Tesseract")
             return OCRFactory._create_tesseract(language, **kwargs)
+
+    @staticmethod
+    def _create_fusion(language: str, **kwargs):
+        """
+        Create the PP-OCRv5 + IndicPhotoOCR + Tesseract fusion processor
+        (src/fusion_ocr_processor.py). Experimental, off by default -- see
+        docs/CURRENT_STATE.md, "Configuration-Driven OCR Engine Selection", for
+        what has and hasn't been validated. Falls back to plain PP-OCRv5 if
+        disabled or unavailable, same pattern as _create_paddle.
+        """
+        try:
+            if not getattr(config, 'ENABLE_FUSION_OCR', False):
+                raise RuntimeError("ENABLE_FUSION_OCR=False in config")
+            from fusion_ocr_processor import FusionOCRProcessor
+            processor = FusionOCRProcessor(language=language, config=config)
+            logger.info(f"✅ Created fusion OCR processor (lang={language})")
+            return processor
+        except Exception as e:
+            logger.warning(f"Fusion OCR unavailable ({e}) — using plain PP-OCRv5")
+            return OCRFactory._create_paddle(language, **kwargs)
 
     @staticmethod
     def _create_hybrid(language: str, **kwargs):

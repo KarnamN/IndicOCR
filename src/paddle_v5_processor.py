@@ -44,6 +44,12 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
+try:
+    from openvino_runner import accelerate_with_openvino as _accelerate_with_openvino
+except ImportError:  # openvino not installed: stay on Paddle's CPU runner
+    def _accelerate_with_openvino(engine, model_name):
+        return False
+
 # ── Module-level availability flag ────────────────────────────────────────────
 # Updated at import time — imported by config_v5.py to set PADDLE_OCR_AVAILABLE
 PADDLEOCR_AVAILABLE = False
@@ -147,6 +153,8 @@ def _get_rec_engine(config=None):
                 else:
                     raise e
             logger.info(f"✅ {model_name} loaded successfully")
+            if use_openvino:
+                _accelerate_with_openvino(_rec_engine, model_name)
     return _rec_engine
 
 
@@ -243,6 +251,14 @@ def _get_det_engine(config=None):
                 else:
                     raise e
 
+            # PaddleX's HPI backend needs the non-PyPI `ultra-infer`, so on most
+            # installs the engine above ends up on Paddle's own CPU runner. Run the
+            # exported ONNX model on OpenVINO directly instead: same weights and
+            # PaddleX pre/post-processing, ~6x faster per page, and higher
+            # recognition confidence (see docs/CURRENT_STATE.md).
+            if use_openvino:
+                _accelerate_with_openvino(_det_engine, model_name)
+
     return _det_engine
 
 
@@ -317,6 +333,40 @@ class PaddleV5Processor:
             logger.debug(f"Resized image: ({w},{h}) → {new_size}")
         return image
 
+    def _clarity_metrics(self, image: Image.Image) -> Tuple[float, float]:
+        """
+        Sharpness (Laplacian variance) and contrast (std dev), measured on a
+        copy resized to PADDLE_MAX_IMAGE_DIM rather than the raw source image.
+
+        Laplacian variance is not resolution-invariant: the same visually
+        crisp page measures lap_var ~8-12 at a real 400 DPI production render
+        (~4400x7000, capped by MAX_RENDER_DIM) but ~1500-2000 once resized to
+        the ~1500px longest side the OCR model actually receives -- three
+        orders of magnitude apart on the same page. Found 2026-09-26: every
+        real page in a live conversion was measuring far below
+        PADDLE_SHARPNESS_LOW_LIMIT (1500) and TESSERACT_MIN_SHARPNESS (800)
+        regardless of true quality, so every page was getting the maximum
+        sharpness boost and every page's is_clear was False. Resizing first
+        makes the metric comparable to the resolution the thresholds were
+        actually tuned against (see docs/CURRENT_STATE.md).
+
+        NOT the same fix as the one already reverted for _assess_clarity (see
+        its call site comment): that measured on a copy already ENHANCED and
+        downscaled, which is circular -- it tells you whether the enhancement
+        worked, not whether the original needed it. This resizes only, with
+        no enhancement applied, purely to put the measurement at a consistent
+        scale; the decision it feeds is still applied to the original image.
+        """
+        max_dim = getattr(self.config, 'PADDLE_MAX_IMAGE_DIM', 1500)
+        w, h = image.size
+        if max(w, h) > max_dim:
+            scale = max_dim / max(w, h)
+            image = image.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
+        gray = np.array(image.convert('L'))
+        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        contrast = float(gray.std())
+        return sharpness, contrast
+
     def _preprocess(self, image: Image.Image, page_label: Optional[str] = None) -> Image.Image:
         """Dynamic preprocessing — contrast + sharpness boost based on image quality metrics."""
         label_prefix = f"[{page_label}] " if page_label else ""
@@ -345,15 +395,11 @@ class PaddleV5Processor:
                 return Image.fromarray(enhanced_gray).convert('RGB')
 
             # ── Global path (default) ─────────────────────────────────────────
-            # Convert to grayscale numpy array for metric calculation
-            img_gray = np.array(image.convert('L'))
+            # Measured at a fixed reference scale (_clarity_metrics), not on
+            # the raw source resolution -- see that method's docstring. The
+            # enhancement below is still applied to the full-resolution image.
+            lap_var, std_dev = self._clarity_metrics(image)
 
-            # 1. Calculate blur metric (Laplacian variance: higher = sharper)
-            lap_var = cv2.Laplacian(img_gray, cv2.CV_64F).var()
-            
-            # 2. Calculate contrast metric (Standard Deviation of gray levels: higher = higher contrast)
-            std_dev = np.std(img_gray)
-            
             # Retrieve threshold parameters from config with safe defaults
             sharpness_low    = getattr(self.config, 'PADDLE_SHARPNESS_LOW_LIMIT', 1500.0)
             sharpness_high   = getattr(self.config, 'PADDLE_SHARPNESS_HIGH_LIMIT', 3000.0)
@@ -744,13 +790,15 @@ class PaddleV5Processor:
         """
         Assess the clarity (sharpness and contrast) of the page image.
         Returns: (sharpness, contrast, is_clear)
+
+        Metrics come from _clarity_metrics (resized to a fixed reference
+        scale before measuring) -- see its docstring. Not the same as the
+        "already-enhanced-and-downscaled copy" this call site's own comment
+        warns against; no enhancement is applied here, only a resize.
         """
         try:
-            cv_img = np.array(image.convert('RGB'))
-            gray = cv2.cvtColor(cv_img, cv2.COLOR_RGB2GRAY)
-            sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-            contrast = float(gray.std())
-            
+            sharpness, contrast = self._clarity_metrics(image)
+
             tess_min_sharpness = getattr(self.config, 'TESSERACT_MIN_SHARPNESS', 800)
             tess_min_contrast = getattr(self.config, 'TESSERACT_MIN_CONTRAST', 45)
             
@@ -880,12 +928,19 @@ class PaddleV5Processor:
 
         label_prefix = f"[{page_label}] " if page_label else ""
 
-        # Step 1: Assess image clarity — measured on the ORIGINAL scan, before any
-        # enhancement/resize. Laplacian variance (the blur metric) is scale- and
-        # contrast-dependent, so measuring it on an already-enhanced-and-downscaled
-        # copy (the previous order) gave an inconsistent signal across pages with
-        # different source resolutions, and made the logged metrics misleading for
-        # threshold tuning.
+        # Step 1: Assess image clarity — on the original (unenhanced) scan, but
+        # _assess_clarity itself now measures at a fixed reference scale
+        # (_clarity_metrics resizes a working copy to PADDLE_MAX_IMAGE_DIM
+        # before computing Laplacian variance), not at the source's raw
+        # resolution. Still not an already-enhanced-and-downscaled copy (the
+        # previous, reverted order) -- that was circular, telling you whether
+        # the enhancement worked rather than whether the original needed it.
+        # Found 2026-09-26: raw-resolution Laplacian variance is not scale-
+        # invariant enough to compare against a fixed threshold across pages
+        # of different source resolutions (see docs/CURRENT_STATE.md and
+        # _clarity_metrics's docstring) -- every real page in a live 400 DPI
+        # conversion was measuring far below TESSERACT_MIN_SHARPNESS on the
+        # raw scan regardless of true quality.
         sharpness, contrast, is_clear = self._assess_clarity(image)
         # DEBUG: fires on every page — routine measurement, not a decision or
         # problem. Switch config.LOG_LEVEL to DEBUG to see this detail again.

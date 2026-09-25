@@ -1,0 +1,3 @@
+# Install IndicPhotoOCR in a separate Python 3.10 environment.
+# The package is not published as indicphotoocrv2 on PyPI.
+git+https://github.com/Bhashini-IITJ/IndicPhotoOCR.git

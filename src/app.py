@@ -6,6 +6,14 @@ os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
 os.environ["FLAGS_enable_pir_api"] = "0"
 os.environ["FLAGS_enable_pir_in_executor"] = "0"
 
+# Pillow's decompression-bomb guard (default limit ~179M pixels) is meant for
+# untrusted third-party images; this app renders the user's own PDF pages, and an
+# oversized scan (e.g. a large physical page or a double-page spread) legitimately
+# exceeds it -- hit in practice while splitting a real book. Raise it process-wide,
+# before anything else imports PIL, rather than patching every Image.open() call site.
+from PIL import Image as _PILImage
+_PILImage.MAX_IMAGE_PIXELS = None
+
 """
 Flask Web Application for PDF to EPUB Converter
 """

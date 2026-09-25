@@ -42,7 +42,18 @@ def split_pdf_pages(input_path: str, output_path: str, dpi: int = 150, split_thr
         
         # 1. Render at a lower DPI just for visual spine/gutter analysis (saves time and memory)
         # Note: We do NOT insert this rendered image into the output PDF.
-        pix = page.get_pixmap(dpi=dpi)
+        # Same guard as pdf_to_epub_converter_optimized_v2.py's page renderer: some
+        # scan-to-PDF tools declare a page box in points 1:1 with the source image's
+        # pixel count, so DPI-based zoom alone can render hundreds of megapixels for
+        # what looks like a normal page. This is only a spine/gutter analysis preview
+        # (the final crop is non-destructive, on the original vector page), so capping
+        # it costs nothing.
+        zoom = dpi / 72
+        MAX_RENDER_DIM = 7000
+        render_w, render_h = page.rect.width * zoom, page.rect.height * zoom
+        if max(render_w, render_h) > MAX_RENDER_DIM:
+            zoom *= MAX_RENDER_DIM / max(render_w, render_h)
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
         img_data = pix.tobytes("png")
         img = Image.open(io.BytesIO(img_data))
         

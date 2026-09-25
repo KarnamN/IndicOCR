@@ -52,6 +52,46 @@ PADDLE_MAX_IMAGE_DIM = 1500   # pixels; PP-OCRv5 det resizes internally to 960 a
 PADDLE_REC_BATCH_SIZE = 4
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  FUSION OCR — PP-OCRv5 + IndicPhotoOCR + Tesseract, EXPERIMENTAL, OFF BY DEFAULT
+# ═══════════════════════════════════════════════════════════════════════════════
+# Built and validated as standalone diagnostics (tests/diagnostics/fuse_ocr_engines.py,
+# build_review_queue.py) across ~18 real pages, not yet run through a full book
+# conversion or scored against verified ground truth — see docs/CURRENT_STATE.md,
+# "Configuration-Driven OCR Engine Selection", before enabling this for real work.
+#
+# To activate: set ENABLE_FUSION_OCR = True AND OCR_ENGINE = 'fusion' (this file
+# already sets OCR_ENGINE below, in the QUALITY GATE section). OCR_ENGINE = 'fusion'
+# forces EVERY page to this path, the same way OCR_ENGINE = 'paddle' or 'tesseract'
+# would bypass AdaptiveOCRFactory's complexity-tier routing entirely — there is no
+# per-page tier that routes to fusion selectively yet. Leaving ENABLE_FUSION_OCR
+# True with OCR_ENGINE left at 'hybrid' does nothing; pages still route to 'paddle'
+# via the normal complexity tiers.
+ENABLE_FUSION_OCR = True
+
+# Skip the slow IndicPhotoOCR pass on pages PP-OCRv5+Tesseract already look easy on
+# (src/engine_router.py). Thresholds were read off one book's data by eye — see that
+# module's docstring for the measured trade-off before trusting it on a different book.
+FUSION_ADAPTIVE_ROUTER = True
+
+# 'hinted' (default): IndicPhotoOCR's slow script-identifier only runs on crops PP-OCRv5
+# already flagged as containing Latin letters. Known gap (docs/CURRENT_STATE.md): misses
+# English PP-OCRv5 already misread as Telugu-shaped garbage. 'vit' checks every crop
+# (slower, its own false-positive problem on Telugu-only pages). 'none' never checks.
+FUSION_IDENTIFIER_MODE = 'hinted'
+
+# Drops IndicPhotoOCR word candidates below this recognition confidence before they
+# reach fusion. Found 2026-09-25: on a real book page, its recognizer collapses on
+# ambiguous/junk crops instead of abstaining -- one page had the same 4-5-char string
+# ('అడుగ') recognized 68 separate times (14% of all 482 word-crops on that page),
+# every occurrence clustered at confidence 0.22-0.36, alongside several other strings
+# with the identical pattern (repeated dozens of times, all in that same low band).
+# Plausible real recurring words on the same page sat higher (0.42-0.59). Default 0.0
+# (IndicPhotoOCRProcessor's own default) never filtered anything. 0.35 is a first-pass
+# threshold read off that one page's separation, not calibrated against ground truth --
+# revisit once score_ocr_accuracy.py has real corrections to check it against.
+FUSION_INDIC_MIN_CONFIDENCE = 0.35
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  PADDLE DETECTOR OVERRIDES
 # ═══════════════════════════════════════════════════════════════════════════════
 # Increase unclip_ratio to expand detected bounding boxes slightly.
@@ -80,7 +120,18 @@ if IS_LINUX:
         # Sub-throttle applied only around the OCR portion of each page (inside
         # process_page_optimized) — keeps concurrent Paddle-lock contention low
         # even though MAX_WORKERS (Stage-1 concurrency) is higher.
-        STAGE2_WORKERS = 2
+        # Raised from 2 to 4, 2026-09-25: with fusion mode live, IndicPhotoOCR also
+        # got its own internal lock (indicphoto_ocr_processor._INDIC_LOCK, added this
+        # session) -- both heavy engines already serialize their own model calls
+        # independently of this semaphore. Confirmed live: pages where the page-level
+        # router SKIPPED IndicPhotoOCR entirely (pure PaddleOCR+Tesseract, a few
+        # seconds of real work) still reported 44-65s "Completed in", because they
+        # were blocked waiting for one of only 2 STAGE2_WORKERS slots while a
+        # different page's IndicPhotoOCR call (30-60s) held one. Raising this doesn't
+        # reintroduce the original Paddle-lock thrash the comment above describes --
+        # threads still queue on _engine_lock/_INDIC_LOCK either way -- it just stops
+        # an unrelated fast page from being held hostage behind a slow one.
+        STAGE2_WORKERS = 4
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  QUALITY GATE — Controls When to Fall Back to Tesseract
@@ -204,9 +255,18 @@ ENABLE_PUNCTUATION_FIXES      = True
 # ═══════════════════════════════════════════════════════════════════════════════
 #  OVERRIDE — OCR ENGINE MODE
 # ═══════════════════════════════════════════════════════════════════════════════
-# Keep 'hybrid' so AdaptiveOCRFactory routing is active.
-# The factory will route to 'paddle' as primary engine.
-OCR_ENGINE       = 'hybrid'
+# Reverted to 'hybrid' 2026-09-22: 'fusion' (PP-OCRv5 + IndicPhotoOCR + Tesseract)
+# measured at 35-40s/page real throughput on a live 76-page book, dominated by
+# IndicPhotoOCR (~70% of its own runtime is its script identifier alone) -- 10-20x
+# slower than plain PP-OCRv5's 1.7-3.6s/page, for an accuracy benefit that is still
+# unverified beyond one draft, unconfirmed ground-truth page. Not worth that cost in
+# the live conversion path yet. IndicPhotoOCR stays available for the offline
+# tests/diagnostics/build_review_queue.py workflow, where its cost is naturally
+# limited to the small set of already-flagged lines rather than every line of every
+# page. Set OCR_ENGINE = 'fusion' again once either (a) real ground truth justifies
+# the cost, or (b) IndicPhotoOCR is restructured to run only on flagged crops instead
+# of the whole page per invocation (see docs/CURRENT_STATE.md's latency section).
+OCR_ENGINE       = 'fusion'
 HYBRID_PRIMARY   = 'paddle'      # was 'tesseract' in base config
 HYBRID_FALLBACK  = 'tesseract'   # Tesseract is now the safety net
 
