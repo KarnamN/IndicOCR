@@ -159,18 +159,13 @@ class TeluguSpellChecker:
     def is_known_word(self, word: str) -> bool:
         return word in self.known_words
 
-    def suggest(self, word: str, max_edit_distance: int = MAX_EDIT_DISTANCE) -> Optional[Tuple[str, int]]:
+    def _encode_to_pua(self, word: str) -> Optional[str]:
         """
-        Look up the best correction for `word` in grapheme-cluster space.
-
-        Returns (corrected_word, edit_distance) only when there is a single,
-        unambiguous best candidate (no tie with another candidate at the same
-        distance) and word is not already known. Returns None otherwise —
-        callers should treat None as "do not correct this word".
+        Encode `word` as a string of PUA characters, one per grapheme cluster,
+        so SymSpell's edit distance operates on whole aksharas instead of raw
+        codepoints. Shared by suggest() and suggest_candidates(). Returns None
+        if the word has more unseen clusters than remaining PUA slots.
         """
-        if self.is_known_word(word):
-            return None
-
         clusters = self._text_processor.segment_graphemes(word)
         # Unseen clusters get a throwaway PUA slot for this lookup only (not
         # persisted into the shared mapping) so they still act as one edit
@@ -186,7 +181,23 @@ class TeluguSpellChecker:
                 pua_char = chr(cp)
                 local_counter[0] += 1
             pua_chars.append(pua_char)
-        pua_string = "".join(pua_chars)
+        return "".join(pua_chars)
+
+    def suggest(self, word: str, max_edit_distance: int = MAX_EDIT_DISTANCE) -> Optional[Tuple[str, int]]:
+        """
+        Look up the best correction for `word` in grapheme-cluster space.
+
+        Returns (corrected_word, edit_distance) only when there is a single,
+        unambiguous best candidate (no tie with another candidate at the same
+        distance) and word is not already known. Returns None otherwise —
+        callers should treat None as "do not correct this word".
+        """
+        if self.is_known_word(word):
+            return None
+
+        pua_string = self._encode_to_pua(word)
+        if pua_string is None:
+            return None
 
         suggestions = self.sym_spell.lookup(
             pua_string, Verbosity.ALL, max_edit_distance=max_edit_distance
@@ -203,6 +214,39 @@ class TeluguSpellChecker:
         ]
         corrected_word = "".join(corrected_clusters)
         return corrected_word, best.distance
+
+    def suggest_candidates(self, word: str, max_edit_distance: int = MAX_EDIT_DISTANCE) -> List[Tuple[str, int]]:
+        """
+        Like suggest(), but returns every candidate found (at any distance up
+        to max_edit_distance), not just a single unambiguous winner.
+
+        suggest()'s tie-avoidance is the right default for blind dictionary
+        correction — but it makes suggest() useless for short/common words,
+        which are exactly the words most likely to have many equally-distant
+        real-word neighbors (e.g. తండి has 55 candidates within edit distance
+        1, so suggest() always returns None for it, tie or not). A caller that
+        has independent structural evidence about which *kind* of edit it's
+        looking for (see TeluguTextProcessor.classify_single_stroke_edit) can
+        filter this raw candidate list itself instead of being blocked by
+        suggest()'s generic ambiguity check. Returns [] under the same
+        conditions suggest() would return None (already known, or no
+        candidate).
+        """
+        if self.is_known_word(word):
+            return []
+
+        pua_string = self._encode_to_pua(word)
+        if pua_string is None:
+            return []
+
+        suggestions = self.sym_spell.lookup(
+            pua_string, Verbosity.ALL, max_edit_distance=max_edit_distance
+        )
+        results = []
+        for s in suggestions:
+            corrected = "".join(self.pua_to_cluster.get(c, c) for c in s.term)
+            results.append((corrected, s.distance))
+        return results
 
 
 # Singleton instance, mirroring get_telugu_post_processor() / get_telugu_text_processor().

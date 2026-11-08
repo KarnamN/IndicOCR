@@ -6,7 +6,8 @@ Applied after OCR extraction to clean up systematic errors.
 import re
 import logging
 import unicodedata
-from typing import Dict, List, Tuple
+from collections import Counter
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,9 @@ class TeluguPostProcessor:
         from telugu_text_processor import dictionary_lookup_candidate
         return dictionary_lookup_candidate(token, text_processor) is not None
 
-    def correct_spelling(self, text: str) -> Tuple[str, List[Dict[str, object]]]:
+    def correct_spelling(
+        self, text: str, token_frequency: Optional[Counter] = None
+    ) -> Tuple[str, List[Dict[str, object]]]:
         """
         Correct structurally-defective Telugu words (orphaned matras / dangling
         viramas, per TeluguTextProcessor.grapheme_validity_score) against a real
@@ -293,6 +296,24 @@ class TeluguPostProcessor:
 
         There is no per-word OCR confidence signal available at this stage, so
         this relies purely on structural + dictionary-membership evidence.
+
+        Args:
+            token_frequency: Optional pre-computed word-frequency count (see
+                telugu_text_processor.compute_book_token_frequency) covering a
+                wider scope than just this call's `text` — typically every page
+                of the same book. When given, this is used instead of counting
+                repeats only within `text` for the repeat-guard below. Matters
+                because a name/word that appears once on THIS page but repeats
+                elsewhere in the same book is otherwise invisible to a
+                page-local count — found live (2026-09-26): సరోజ (a character's
+                name appearing 11 times across a real book, never more than
+                twice on any single page) still got wrongly "corrected" to
+                సరోజి on every page where it appeared only once, because a
+                page-local counter alone can't see the other pages. When None
+                (the default — e.g. a caller correcting one page in isolation,
+                with no access to the rest of the book), falls back to counting
+                repeats only within this call's own `text`, the original,
+                narrower protection.
 
         Returns:
             (corrected_text, corrections) where corrections is a list of
@@ -306,6 +327,22 @@ class TeluguPostProcessor:
 
         text_processor = get_telugu_text_processor()
         spell_checker = get_telugu_spell_checker()
+
+        if token_frequency is not None:
+            candidate_counts = token_frequency
+        else:
+            # How many times each dictionary-eligible token form appears in
+            # this text (one page, when no book-wide count was supplied).
+            # Used below to protect a repeated word/name from the widened
+            # stroke-correction match — see that branch for why. Computed
+            # once up front rather than per-token to avoid re-deriving it
+            # inside the loop.
+            candidate_counts = Counter()
+            for _line in text.split('\n'):
+                for _tok in _line.split(' '):
+                    _cand = dictionary_lookup_candidate(_tok, text_processor)
+                    if _cand is not None:
+                        candidate_counts[_cand] += 1
 
         corrections: List[Dict[str, object]] = []
         lines = text.split('\n')
@@ -328,21 +365,62 @@ class TeluguPostProcessor:
                     # — NOT a general "is this a real word" check, which risks
                     # false positives on rare/dialectal words the flat
                     # dictionary just doesn't have.
-                    if self.enable_stroke_correction:
-                        stroke_suggestion = spell_checker.suggest(candidate, max_edit_distance=1)
-                        if stroke_suggestion is not None:
-                            stroke_corrected, stroke_distance = stroke_suggestion
-                            edit_type = text_processor.classify_single_stroke_edit(candidate, stroke_corrected)
+                    #
+                    # Uses suggest_candidates() (every candidate at distance 1),
+                    # not suggest() (a single unambiguous winner or nothing) —
+                    # suggest()'s generic tie-avoidance blocks short/common
+                    # words outright (e.g. తండి has 55 same-distance
+                    # candidates, so suggest() always returns None for it
+                    # regardless of whether one of them is a genuine stroke
+                    # fix). Filtering the full candidate list through
+                    # classify_single_stroke_edit first, and only accepting
+                    # when exactly one candidate survives that structural
+                    # filter, recovers real cases suggest() could never reach
+                    # (e.g. మాతమే -> మాత్రమే, తలుప -> తలుపు — confirmed
+                    # 2026-09-26 against the real dictionary) while staying
+                    # just as conservative: a short word with several
+                    # equally-plausible one-stroke real words (తండి is one
+                    # stroke from తిండి/తొండి/తండ్రి all at once) still yields
+                    # more than one survivor and is correctly left untouched
+                    # rather than guessing which one was intended.
+                    #
+                    # Guarded by candidate_counts[candidate] < 2: found live
+                    # (2026-09-26, real book) that this widened match narrows
+                    # to exactly one "survivor" just as confidently for a
+                    # structurally-unrelated false positive as for a real
+                    # fix — సరోజ (a character's name, appearing 5+ times
+                    # across two pages, not in the flat dictionary at all)
+                    # structurally narrows to exactly one candidate,
+                    # సరోజి (a real but different, unrelated word), and would
+                    # otherwise get silently "corrected" into the wrong word
+                    # every single time it appears. A name/word repeated
+                    # identically across a page is strong evidence it's
+                    # intentional, not a one-off OCR stroke drop (real OCR
+                    # noise doesn't reliably collide with the same unrelated
+                    # dictionary word multiple independent times) — so a
+                    # repeated token is left alone even when it structurally
+                    # narrows to one match. Deliberately errs conservative:
+                    # this also skips a genuinely repeated OCR defect (e.g. a
+                    # systematic misread that recurs identically), but a
+                    # silent wrong correction to a real name is worse than a
+                    # missed one, consistent with this corrector's existing
+                    # conservative-by-default design elsewhere.
+                    if self.enable_stroke_correction and candidate_counts[candidate] < 2:
+                        stroke_matches = []
+                        for cand_word, cand_distance in spell_checker.suggest_candidates(candidate, max_edit_distance=1):
+                            edit_type = text_processor.classify_single_stroke_edit(candidate, cand_word)
+                            if edit_type is not None:
+                                stroke_matches.append((cand_word, cand_distance, edit_type))
+                        if len(stroke_matches) == 1:
+                            stroke_corrected, stroke_distance, edit_type = stroke_matches[0]
                             # 'missing_matra'/'missing_vattu' (a stroke the OCR dropped) are
-                            # always eligible when this branch is reached. 'extra_matra'/
-                            # 'extra_vattu' (removing a stroke) additionally require
-                            # enable_stroke_removal_correction — real-data validation found
-                            # that direction riskier (legitimate long-vowel/emphatic forms
-                            # can look like a false "extra" stroke). See __init__ docstring.
+                            # always eligible. 'extra_matra'/'extra_vattu' (removing a
+                            # stroke) additionally require enable_stroke_removal_correction
+                            # — real-data validation found that direction riskier
+                            # (legitimate long-vowel/emphatic forms can look like a false
+                            # "extra" stroke). See __init__ docstring.
                             is_removal_edit = edit_type in ('extra_matra', 'extra_vattu')
-                            if edit_type is not None and (
-                                not is_removal_edit or self.enable_stroke_removal_correction
-                            ):
+                            if not is_removal_edit or self.enable_stroke_removal_correction:
                                 logger.debug(
                                     f"Stroke-repair correction: '{token}' -> '{stroke_corrected}' ({edit_type})"
                                 )
@@ -395,11 +473,27 @@ class TeluguPostProcessor:
         fix is therefore not safe here (see 2026-09-07 real-corpus scan,
         [[project_paddle_letter_mistake_investigation]]: ~19,000 raw matches of
         this shape across data/temp/, a meaningful fraction genuinely
-        parenthetical). Dictionary-gated instead: only rewrite when the word
-        right after "(" is NOT already a known dictionary word, AND inserting
-        "్ర" after its first consonant DOES produce a known dictionary word.
-        Conservative on both ends — leaves genuinely ambiguous/OOV cases
-        (neither form known) untouched rather than guessing.
+        parenthetical). Dictionary-gated instead: only consider rewriting when
+        the word right after "(" is NOT already a known dictionary word (that
+        check alone is what protects genuine parentheticals like "(నవల)" above
+        — it never reaches the fuzzy step below).
+
+        Between the two candidates (plain vs. "్ర"-inserted), prefer an exact
+        dictionary hit if either gets one; otherwise fall back to comparing
+        which one is closer to *some* known word via the same fuzzy
+        grapheme-cluster lookup correct_spelling() already uses elsewhere
+        (TeluguSpellChecker.suggest()). This fallback exists because the
+        dictionary is a flat, non-inflected wordlist (see
+        docs/TELUGU_SPELL_CORRECTION_TODO.md item 6) — an exact-match-only gate
+        never accepts a correctly-conjugated verb like ప్రయత్నించింది ("tried")
+        or ప్రారంభించాడు ("began") just because the citation/root form is the
+        one actually in the list, not this inflected form. Confirmed against
+        the real dictionary (2026-09-26): "పయత్నించింది"/"పారంభించాడు" (broken)
+        get no suggestion at all, while "ప్రయత్నించింది"/"ప్రారంభించాడు" (్ర
+        restored) each get one within edit distance 2 — the fixed reading is
+        measurably closer to real Telugu even though it's not a literal entry.
+        Still conservative: if neither reading gets a strictly better match,
+        nothing is changed.
         """
         from telugu_spell_checker import get_telugu_spell_checker
         spell_checker = get_telugu_spell_checker()
@@ -412,7 +506,20 @@ class TeluguPostProcessor:
             fixed = consonant + '్ర' + rest
             if spell_checker.is_known_word(fixed):
                 return fixed
-            return m.group(0)  # neither form known — ambiguous, don't guess
+
+            # Neither is an exact dictionary hit. Compare how close each
+            # reading is to *some* real word instead of giving up — see
+            # docstring above. suggest() returns None for a word that's
+            # already known (not the case for either candidate here, both
+            # failed is_known_word above) or that has no candidate within its
+            # max edit distance.
+            plain_suggestion = spell_checker.suggest(plain)
+            fixed_suggestion = spell_checker.suggest(fixed)
+            if fixed_suggestion is not None and (
+                plain_suggestion is None or fixed_suggestion[1] < plain_suggestion[1]
+            ):
+                return fixed
+            return m.group(0)  # no reading is clearly closer to real Telugu — don't guess
 
         return re.sub(
             r'(?<![ఀ-౿])\(([క-హ])(?!్)([ఀ-౿]*)',
@@ -433,16 +540,25 @@ class TeluguPostProcessor:
         processed_text, _corrections = self._process_impl(text)
         return processed_text
 
-    def process_with_corrections(self, text: str) -> Tuple[str, List[Dict[str, object]]]:
+    def process_with_corrections(
+        self, text: str, token_frequency: Optional[Counter] = None
+    ) -> Tuple[str, List[Dict[str, object]]]:
         """
         Same as process(), but also returns the dictionary-correction change-log
         (empty list if enable_dictionary_correction is off, or nothing was
         corrected). Use this when the caller needs to know exactly which words
         were auto-corrected — e.g. to flag pages for manual review.
-        """
-        return self._process_impl(text)
 
-    def _process_impl(self, text: str) -> Tuple[str, List[Dict[str, object]]]:
+        token_frequency: see correct_spelling() — pass a book-wide count when
+        available (e.g. re-processing every page of a book together) so the
+        repeated-word/name guard isn't limited to what repeats on this one
+        page.
+        """
+        return self._process_impl(text, token_frequency)
+
+    def _process_impl(
+        self, text: str, token_frequency: Optional[Counter] = None
+    ) -> Tuple[str, List[Dict[str, object]]]:
         if not text or not text.strip():
             return text, []
 
@@ -478,7 +594,7 @@ class TeluguPostProcessor:
         # cleanup so it never sees tokens that are actually mis-scripted markers
         # or stray English, only genuine Telugu-script words.
         if self.enable_dictionary_correction:
-            text, corrections = self.correct_spelling(text)
+            text, corrections = self.correct_spelling(text, token_frequency=token_frequency)
 
         # Clean up whitespace
         text = re.sub(r' +', ' ', text)   # Multiple spaces -> single
@@ -564,11 +680,17 @@ def post_process_telugu(text: str) -> str:
     return processor.process(text)
 
 
-def post_process_telugu_with_corrections(text: str) -> Tuple[str, List[Dict[str, object]]]:
+def post_process_telugu_with_corrections(
+    text: str, token_frequency: Optional[Counter] = None
+) -> Tuple[str, List[Dict[str, object]]]:
     """
     Same as post_process_telugu(), but also returns the dictionary-correction
     change-log (empty list if the feature is off or nothing was corrected).
     Safe to call concurrently — see TeluguPostProcessor.correct_spelling().
+
+    token_frequency: optional book-wide word count — see
+    TeluguPostProcessor.correct_spelling() and
+    telugu_text_processor.compute_book_token_frequency().
     """
     processor = get_telugu_post_processor()
-    return processor.process_with_corrections(text)
+    return processor.process_with_corrections(text, token_frequency=token_frequency)

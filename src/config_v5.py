@@ -266,7 +266,7 @@ ENABLE_PUNCTUATION_FIXES      = True
 # page. Set OCR_ENGINE = 'fusion' again once either (a) real ground truth justifies
 # the cost, or (b) IndicPhotoOCR is restructured to run only on flagged crops instead
 # of the whole page per invocation (see docs/CURRENT_STATE.md's latency section).
-OCR_ENGINE       = 'fusion'
+OCR_ENGINE       = 'hybrid'        # 'paddle', 'tesseract', 'fusion', or 'hybrid' (PP-OCRv5 primary, Tesseract fallback)
 HYBRID_PRIMARY   = 'paddle'      # was 'tesseract' in base config
 HYBRID_FALLBACK  = 'tesseract'   # Tesseract is now the safety net
 
