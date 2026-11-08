@@ -23,7 +23,7 @@ print(f"Image size: {page_w}x{page_h}")
 # ── Step 1: Layout analysis (detect & crop figures) ──────────────────────────
 from layout_analyzer import LayoutAnalyzer
 analyzer = LayoutAnalyzer()
-figure_crops, figure_coords = analyzer.extract_figures(page_image)
+figure_crops, figure_coords, _ = analyzer.extract_figures(page_image)
 print(f"\n[LAYOUT] Detected {len(figure_crops)} figure(s):")
 for i, c in enumerate(figure_coords):
     print(f"  Figure {i+1}: x1={c[0]},y1={c[1]},x2={c[2]},y2={c[3]}  [{c[2]-c[0]}x{c[3]-c[1]}px]")

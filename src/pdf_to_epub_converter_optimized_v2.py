@@ -907,9 +907,13 @@ class OptimizedPDFToEPUBConverter:
             layout_figure_crops: List[Image.Image] = []
             figure_coords: List[Tuple[int,int,int,int]] = []
             image_for_analysis = page_image  # default: use original
+            # Full title/text/figure/table boxes from this same inference, reused
+            # below when building positional EPUB content blocks instead of
+            # re-running the layout model a second time on the same page_image.
+            cached_full_layout: Optional[Dict[str, List[Dict]]] = None
 
             try:
-                layout_figure_crops, figure_coords = self.layout_analyzer.extract_figures(page_image)
+                layout_figure_crops, figure_coords, cached_full_layout = self.layout_analyzer.extract_figures(page_image)
                 if layout_figure_crops:
                     logger.info(
                         f"  ✂️  Layout: {len(layout_figure_crops)} figure(s) pre-extracted. "
@@ -1649,8 +1653,12 @@ class OptimizedPDFToEPUBConverter:
             layout_figure_coords = analysis.get('layout_figure_coords', [])
             if layout_figure_coords and layout_figure_crops:
                 try:
-                    # Get full layout from analyzer (already ran earlier — reuse engine cache)
-                    full_layout = self.layout_analyzer.analyze(page_image)
+                    # Reuse the layout inference from the extract_figures() call
+                    # earlier in this same page (cached_full_layout) instead of
+                    # running the layout model on page_image a second time.
+                    # Falls back to a fresh call only if that earlier call didn't
+                    # run or didn't populate it (e.g. the try block above raised).
+                    full_layout = cached_full_layout if cached_full_layout else self.layout_analyzer.analyze(page_image)
                     page_h_for_blocks = page_image.height
                     content_blocks = []
 

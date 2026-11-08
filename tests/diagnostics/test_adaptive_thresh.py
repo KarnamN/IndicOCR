@@ -50,7 +50,7 @@ if img_path.exists():
     # We need text_region from complexity analyzer
     from layout_analyzer import LayoutAnalyzer
     layout_analyzer = LayoutAnalyzer()
-    crops, coords = layout_analyzer.extract_figures(image)
+    crops, coords, _ = layout_analyzer.extract_figures(image)
     
     # Mask figures in adaptive binary
     binary_adaptive_masked = binary_adaptive.copy()

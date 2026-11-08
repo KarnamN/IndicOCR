@@ -20,7 +20,7 @@ if img_path.exists():
     # Get layout figures to mask them out (as done in the actual converter pipeline)
     from layout_analyzer import LayoutAnalyzer
     layout_analyzer = LayoutAnalyzer()
-    crops, coords = layout_analyzer.extract_figures(image)
+    crops, coords, _ = layout_analyzer.extract_figures(image)
     
     # Mask out the figures
     binary_masked = binary.copy()
