@@ -18,7 +18,7 @@ if img_path.exists():
     
     from layout_analyzer import LayoutAnalyzer
     layout_analyzer = LayoutAnalyzer()
-    crops, coords = layout_analyzer.extract_figures(image)
+    crops, coords, _ = layout_analyzer.extract_figures(image)
     
     binary_masked = binary.copy()
     for (x1, y1, x2, y2) in coords:

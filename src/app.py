@@ -1,4 +1,5 @@
 import os
+import shutil
 # Force disable MKLDNN globally to prevent PIR oneDNN crashes on CPU
 os.environ["FLAGS_use_mkldnn"] = "0"
 os.environ["FLAGS_mkldnn_cache_capacity"] = "0"
@@ -79,6 +80,12 @@ app.config['SECRET_KEY'] = config.SECRET_KEY
 app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = config.OUTPUT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = config.MAX_FILE_SIZE
+# socketio.run(debug=...) below does NOT set app.debug the way plain
+# app.run(debug=True) does, so Jinja's template auto-reload (which keys off
+# app.debug) never activates on its own -- every template edit needs a full
+# server restart otherwise, silently serving stale HTML/CSS/JS with no error.
+# Set explicitly so template changes take effect on the next request.
+app.config['TEMPLATES_AUTO_RELOAD'] = config.DEBUG
 
 # Initialize SocketIO with threading mode and increased timeouts
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', ping_timeout=120, ping_interval=25)
@@ -195,7 +202,22 @@ def convert_pdf_background(job_id, input_path, output_path, mobi_path, params):
             skip_first_pages=params.get('skip_cover_pages', 2),
             only_pages=params.get('only_pages', [])
         )
-        
+
+        # Persist the uploaded PDF into the results folder as source.pdf so the
+        # correction dashboard's per-page image (/api/correction/page/<job_id>/<n>)
+        # has something to re-render from for regular pages, which don't keep
+        # their own image in the .jbl (see that route's docstring). Without this,
+        # a freshly-converted job (as opposed to one reopened via
+        # /api/correction/resume with a re-uploaded PDF) never gets a source.pdf
+        # and every non-cover page shows "No image available". Best-effort: a
+        # missing preview image must never fail the conversion itself.
+        results_dir = getattr(converter, 'temp_results_dir', None)
+        if results_dir:
+            try:
+                shutil.copyfile(input_path, Path(results_dir) / "source.pdf")
+            except Exception as e:
+                logger.warning(f"Could not save source.pdf into {results_dir}: {e}")
+
         # Collect detailed usage report
         usage_report = {
             'paddle_pages':       getattr(converter, 'paddle_pages', 0),
@@ -881,11 +903,43 @@ def resolve_audit_discrepancy(job_id, page_num):
 
 # --- PAGE CORRECTION UI ROUTES ---
 
+def _rehydrate_job_from_disk(job_id):
+    """Reconstruct an in-memory job entry from its on-disk results folder.
+
+    conversion_jobs is in-memory only, so every server restart wipes it —
+    a bookmarked/refreshed /correction/<job_id> URL from before the restart
+    would otherwise 404 even though the actual results are still on disk.
+    Mirrors resume_correction()'s job-entry shape exactly, so every other
+    route keyed on conversion_jobs[job_id] keeps working unchanged once this
+    has run — callers only need to invoke this once, at the page entry point.
+    """
+    if not config.TEMP_FOLDER.exists():
+        return None
+    for d in config.TEMP_FOLDER.iterdir():
+        if d.is_dir() and d.name.endswith(job_id) and any(d.glob("page_*.jbl")):
+            from pdf_to_epub_converter_optimized_v2 import OptimizedPDFToEPUBConverter
+            converter = OptimizedPDFToEPUBConverter(preserve_images=True, detect_tables=True)
+            converter.temp_results_dir = d
+            converter.session_id = job_id
+            source_pdf_path = d / "source.pdf"
+            pdf_path = source_pdf_path if source_pdf_path.exists() else None
+            job = {
+                'status': 'completed',
+                'converter': converter,
+                'title': d.name.rsplit('_', 1)[0],
+                'pdf_path': str(pdf_path) if pdf_path else None,
+            }
+            conversion_jobs[job_id] = job
+            logger.info(f"📂 Auto-rehydrated job {job_id} from disk after server restart: {d}")
+            return job
+    return None
+
+
 @app.route('/correction/<job_id>')
 def correction_ui(job_id):
     """Render the manual correction dashboard for a job."""
-    if job_id not in conversion_jobs:
-        return render_template('error.html', message="Job not found"), 404
+    if job_id not in conversion_jobs and not _rehydrate_job_from_disk(job_id):
+        return render_template('error.html', message="Job not found — it may not exist, or its results folder was moved/deleted."), 404
     return render_template('correction.html', job_id=job_id)
 
 
@@ -1026,6 +1080,29 @@ def get_page_for_correction(job_id, page_num):
             buffered = io.BytesIO()
             img.save(buffered, format="JPEG")
             img_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        else:
+            # Regular pages don't persist their source image in the .jbl (keeps
+            # results folders small) — re-render it from source.pdf on demand so
+            # the correction dashboard's side-by-side view still works. Same
+            # source.pdf a resumed job's REWORK button already depends on (see
+            # /api/correction/resume's docstring), so this has no new requirement.
+            source_pdf = results_dir / "source.pdf"
+            if source_pdf.exists():
+                try:
+                    doc = fitz.open(source_pdf)
+                    if 0 <= page_num < len(doc):
+                        page = doc.load_page(page_num)
+                        # Display-only render — full OCR DPI isn't needed for a
+                        # human to visually compare against the OCR text.
+                        zoom = 1600 / max(page.rect.width, page.rect.height)
+                        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        buffered = io.BytesIO()
+                        img.save(buffered, format="JPEG", quality=85)
+                        img_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                    doc.close()
+                except Exception as e:
+                    logger.warning(f"Could not render page {page_num} from source.pdf: {e}")
 
         return jsonify({
             'page_num': page_num,
@@ -1086,6 +1163,167 @@ def save_corrected_page(job_id, page_num):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def _iter_page_jbl_files(results_dir):
+    """Yield (page_num, sub_idx, path) for every saved page, sorted by page_num.
+
+    Mirrors get_correction_pages()'s own filename parsing exactly (page_{page_num}_{sub_idx}.jbl).
+    """
+    entries = []
+    for f in results_dir.glob("page_*.jbl"):
+        try:
+            parts = f.stem.replace("page_", "").split("_")
+            page_num = int(parts[0])
+            sub_idx = int(parts[1]) if len(parts) > 1 else 0
+            entries.append((page_num, sub_idx, f))
+        except (ValueError, IndexError):
+            continue
+    entries.sort(key=lambda e: (e[0], e[1]))
+    return entries
+
+
+@app.route('/api/correction/find_all/<job_id>', methods=['POST'])
+def find_all_pages(job_id):
+    """Search every saved page's text for a literal substring.
+
+    Book-wide counterpart to the single-page editor — browsers only ever have
+    one page's text loaded at a time, so this has to run server-side over
+    every page_*.jbl in the results folder rather than client-side.
+    """
+    query = (request.get_json(silent=True) or {}).get('query', '')
+    if not query:
+        return jsonify({'error': 'query is required'}), 400
+
+    results_dir = _resolve_results_dir(job_id)
+    if not results_dir:
+        return jsonify({'error': 'Results not found'}), 404
+
+    import joblib
+    CONTEXT = 30  # chars of surrounding text on each side of a match, for the preview
+    MAX_SNIPPETS_PER_PAGE = 3
+
+    results = []
+    total_matches = 0
+    for page_num, sub_idx, jbl_path in _iter_page_jbl_files(results_dir):
+        try:
+            data = joblib.load(jbl_path)
+        except Exception:
+            continue
+        text = data.get('text', '') or ''
+        count = text.count(query)
+        if count == 0:
+            continue
+        total_matches += count
+
+        snippets = []
+        start = 0
+        for _ in range(min(count, MAX_SNIPPETS_PER_PAGE)):
+            idx = text.find(query, start)
+            if idx == -1:
+                break
+            snip_start = max(0, idx - CONTEXT)
+            snip_end = min(len(text), idx + len(query) + CONTEXT)
+            snippets.append(
+                ('…' if snip_start > 0 else '') +
+                text[snip_start:idx] + '⟦' + text[idx:idx + len(query)] + '⟧' + text[idx + len(query):snip_end] +
+                ('…' if snip_end < len(text) else '')
+            )
+            start = idx + len(query)
+
+        results.append({
+            'page_num': page_num,
+            'sub_idx': sub_idx,
+            'count': count,
+            'snippets': snippets,
+        })
+
+    return jsonify({
+        'query': query,
+        'total_matches': total_matches,
+        'total_pages': len(results),
+        'results': results,
+    })
+
+
+@app.route('/api/correction/replace_all/<job_id>', methods=['POST'])
+def replace_all_pages(job_id):
+    """Apply a literal find/replace across every saved page that contains a match.
+
+    An explicit, user-directed bulk edit -- unlike the automated correction
+    pass, this intentionally does NOT skip pages already flagged
+    manual_correction=True; the human driving this action IS the manual
+    correction. Marks every page it touches the same way save_corrected_page()
+    does, so they behave identically afterwards (dropped from the flagged
+    list, protected from any future automated re-correction pass).
+    """
+    body = request.get_json(silent=True) or {}
+    query = body.get('query', '')
+    replacement = body.get('replacement', '')
+    page_nums = body.get('page_nums')  # optional: list of ints to limit scope
+
+    if not query:
+        return jsonify({'error': 'query is required'}), 400
+
+    results_dir = _resolve_results_dir(job_id)
+    if not results_dir:
+        return jsonify({'error': 'Results not found'}), 404
+
+    import joblib
+    import json as _json
+
+    pages_changed = 0
+    total_replacements = 0
+    changed_page_nums = []
+    for page_num, sub_idx, jbl_path in _iter_page_jbl_files(results_dir):
+        if page_nums is not None and page_num not in page_nums:
+            continue
+        try:
+            data = joblib.load(jbl_path)
+        except Exception:
+            continue
+        text = data.get('text', '') or ''
+        count = text.count(query)
+        if count == 0:
+            continue
+
+        new_text = text.replace(query, replacement)
+        data['text'] = new_text
+        # manual_correction=True protects this page from a future automated
+        # re-correction pass overwriting the replacement. needs_manual_review
+        # is deliberately left untouched -- unlike save_corrected_page() (a
+        # full read-through of one page), a bulk find/replace says nothing
+        # about whether the page's OTHER flagged dictionary_corrections were
+        # actually looked at, so it must not silently clear that flag.
+        data['manual_correction'] = True
+        joblib.dump(data, jbl_path)
+
+        json_path = jbl_path.with_name(jbl_path.stem + "_text.json")
+        if json_path.exists():
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    meta = _json.load(f)
+                meta['text'] = new_text
+                meta['text_length'] = len(new_text)
+                meta['manual_correction'] = True
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    _json.dump(meta, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
+        pages_changed += 1
+        total_replacements += count
+        changed_page_nums.append(page_num)
+
+    logger.info(
+        f"🔎 Find & replace on job {job_id}: '{query}' -> '{replacement}' "
+        f"({total_replacements} occurrence(s) across {pages_changed} page(s))"
+    )
+    return jsonify({
+        'pages_changed': pages_changed,
+        'total_replacements': total_replacements,
+        'changed_page_nums': changed_page_nums,
+    })
+
 
 @app.route('/api/correction/rework/<job_id>/<int:page_num>', methods=['POST'])
 def rework_page(job_id, page_num):

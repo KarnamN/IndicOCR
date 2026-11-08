@@ -14,9 +14,19 @@
             --header-height: 70px;
         }
 
+        html {
+            /* body's overflow:hidden alone doesn't reliably block page-level
+               scroll in every browser -- the scrolling box is html's, not
+               body's, so it needs the same constraint or a wide fixed-position
+               descendant (e.g. the header) can still force a page scrollbar. */
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             margin: 0;
             padding: 0;
+            height: 100%;
             overflow: hidden;
             background: #f8fafc;
             /* style.css (shared with the dark-themed main app) sets body { color:
@@ -39,6 +49,8 @@
             top: 0;
             left: 0;
             right: 0;
+            width: 100%;
+            box-sizing: border-box;
             height: var(--header-height);
             background: white;
             border-bottom: 1px solid #e2e8f0;
@@ -46,16 +58,76 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 2rem;
+            gap: 1rem;
+            overflow: hidden;
             z-index: 100;
         }
 
         .sidebar {
             width: var(--sidebar-width);
+            flex-shrink: 0;
+            position: relative;
             background: white;
             border-right: 1px solid #e2e8f0;
             display: flex;
             flex-direction: column;
             overflow-y: auto;
+            overflow-x: hidden;
+            transition: width 0.2s ease, margin-left 0.2s ease;
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            margin-left: -1px; /* also hide the border-right when collapsed */
+            overflow: hidden;
+        }
+
+        /* Sibling of .sidebar (not a child) so it's never clipped by the
+           sidebar's own overflow:hidden while collapsed -- always visible,
+           unlike the header hamburger button which sits somewhere that can
+           get hidden by unrelated header layout issues. Positioned via JS
+           (see toggleSidebar()/restoreSidebarState()) since its `left` needs
+           to track the sidebar's current width, expanded or collapsed. */
+        .sidebar-edge-toggle {
+            position: absolute;
+            top: 50%;
+            left: calc(var(--sidebar-width) - 14px);
+            transform: translateY(-50%);
+            width: 28px;
+            height: 44px;
+            border-radius: 0 8px 8px 0;
+            border: 1px solid #e2e8f0;
+            border-left: none;
+            background: #6366f1;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            z-index: 50;
+            box-shadow: 2px 0 6px rgba(0,0,0,0.15);
+            transition: left 0.2s ease;
+        }
+        .sidebar-edge-toggle:hover {
+            background: #4f46e5;
+        }
+
+        .sidebar-toggle-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .sidebar-toggle-btn:hover {
+            background: #f1f5f9;
         }
 
         .sidebar-header {
@@ -127,24 +199,69 @@
         .main-editor {
             flex: 1;
             display: flex;
+            flex-direction: column;
             background: #f1f5f9;
             /* Extra bottom padding reserves room for the floating .action-bar
                (fixed, bottom: 2rem, ~3.6rem tall) so it doesn't sit on top of
                content anchored to the pane's bottom edge — e.g. the last row
                of the on-screen Telugu keyboard. */
             padding: 1rem 1rem 6rem 1rem;
-            gap: 1rem;
             overflow: hidden;
+            min-height: 0;
+        }
+
+        /* Holds the review banner, in normal flow — pushes the panes down
+           instead of floating over them (was position:fixed on <body>,
+           which visually overlapped the image pane). */
+        #pendingReviewBannerSlot:empty {
+            display: none;
+        }
+        #pendingReviewBannerSlot {
+            flex-shrink: 0;
+            margin-bottom: 1rem;
+        }
+
+        .panes-row {
+            flex: 1;
+            display: flex;
+            gap: 1rem;
+            min-height: 0;
         }
 
         .view-pane {
-            flex: 1;
+            flex: 1 1 50%;
+            min-width: 0;
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        /* Draggable divider between the image and text panes so their split
+           ratio is adjustable instead of a fixed 50/50. */
+        .pane-splitter {
+            flex: 0 0 10px;
+            cursor: col-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pane-splitter::after {
+            content: "";
+            width: 4px;
+            height: 48px;
+            border-radius: 2px;
+            background: #cbd5e1;
+        }
+        .pane-splitter:hover::after,
+        .pane-splitter.dragging::after {
+            background: #6366f1;
+        }
+        body.pane-resizing {
+            cursor: col-resize;
+            user-select: none;
         }
 
         .pane-header {
@@ -160,17 +277,40 @@
 
         .image-viewer {
             flex: 1;
+            min-height: 0;
             overflow: auto;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            /* flex-start (not center) — centering an image larger than the
+               viewport with overflow:auto clips the top/bottom/sides outside
+               a browser's reachable scroll range. flex-start keeps the whole
+               image reachable by scrolling from a fixed top-left origin. */
+            align-items: flex-start;
+            justify-content: flex-start;
             background: #334155;
         }
 
         .image-viewer img {
             max-width: 100%;
+            max-height: 100%;
+            width: auto;
             height: auto;
+            object-fit: contain;
             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            cursor: zoom-in;
+            /* Auto margins center the image when it's smaller than the pane
+               (fit mode); flexbox collapses them to 0 on their own once the
+               image is larger than the pane (zoomed mode), so scrolling still
+               reaches the full image from a top-left origin either way. */
+            margin: auto;
+        }
+
+        /* Click-to-zoom: natural size, scrollable both directions, for
+           inspecting fine vattu/matra marks the fit-to-pane view is too
+           small to show clearly. */
+        .image-viewer img.zoomed {
+            max-width: none;
+            max-height: none;
+            cursor: zoom-out;
         }
 
         .text-editor {
@@ -179,15 +319,49 @@
             flex-direction: column;
         }
 
-        .text-editor textarea {
+        /* Holds the highlight overlay + textarea stacked exactly on top of
+           each other (see the JS-side comment on renderEditorHighlight for
+           why: a plain <textarea> can't style individual words inline). */
+        .editor-stack {
+            position: relative;
             flex: 1;
+            min-height: 0;
+        }
+
+        /* Shared box model — MUST stay identical between this and the
+           textarea below, or highlighted words drift out of alignment with
+           the real text on top of them. */
+        .editor-stack textarea,
+        .editor-highlight {
+            position: absolute;
+            inset: 0;
+            margin: 0;
             border: none;
             padding: 1.5rem;
             font-family: 'Noto Sans Telugu', sans-serif;
             font-size: 1.1rem;
             line-height: 1.8;
+            box-sizing: border-box;
+        }
+
+        .editor-stack textarea {
+            background: transparent;
             resize: none;
             outline: none;
+        }
+
+        .editor-highlight {
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: transparent;
+            pointer-events: none;
+        }
+
+        .editor-highlight mark {
+            background: #fde68a;
+            color: transparent;
+            border-radius: 3px;
         }
 
         .action-bar {
@@ -301,11 +475,87 @@
             color: white;
             border-color: #6366f1;
         }
+
+        /* Find & Replace modal */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-box {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 560px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 600;
+        }
+        .modal-close-btn {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #64748b;
+        }
+        .modal-body {
+            padding: 1.25rem;
+            overflow-y: auto;
+        }
+        .modal-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 10px 0 4px;
+        }
+        .modal-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-family: 'Noto Sans Telugu', sans-serif;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        .fr-page-row {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .fr-page-row:hover {
+            background: #f8fafc;
+        }
+        .fr-snippet {
+            font-family: 'Noto Sans Telugu', sans-serif;
+            color: #64748b;
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+        .fr-snippet mark {
+            background: #fde68a;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
     <header class="correction-header">
         <div class="logo-area" style="display: flex; align-items: center; gap: 10px;">
+            <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="Show/hide page list">☰</button>
             <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
                 <rect width="48" height="48" rx="8" fill="#6366f1" />
                 <path d="M14 18h20M14 24h20M14 30h14" stroke="white" stroke-width="3" stroke-linecap="round" />
@@ -316,6 +566,7 @@
             Job ID: <span id="jobIdLabel" style="font-family: monospace; font-weight: 600;">{{ job_id }}</span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn" onclick="openFindReplace()" title="Find & replace a word/phrase across every page in this book">🔍 Find &amp; Replace</button>
             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
                 <button class="btn btn-primary" id="rebuildBtn" onclick="rebuildBook()" style="background: #059669;"
                         title="Builds the EPUB/MOBI now using whatever is currently saved — you don't need to review every flagged page first.">BUILD EBOOK</button>
@@ -325,7 +576,8 @@
         </div>
     </header>
 
-    <div class="correction-container">
+    <div class="correction-container" style="position: relative;">
+        <button class="sidebar-edge-toggle" id="sidebarEdgeToggle" onclick="toggleSidebar()" title="Show/hide page list">◀</button>
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; flex-direction: column; gap: 8px;">
                 <div class="filter-toggle" id="filterToggle" style="display: flex; gap: 4px;">
@@ -343,8 +595,10 @@
         </div>
 
         <main class="main-editor">
+            <div id="pendingReviewBannerSlot"></div>
+            <div class="panes-row">
             <!-- Image Pane -->
-            <div class="view-pane">
+            <div class="view-pane" id="imagePane">
                 <div class="pane-header">
                     <span>Original Page Image</span>
                     <span id="pageLabel">—</span>
@@ -353,6 +607,8 @@
                     <div style="color: #cbd5e1;">Select a page to view</div>
                 </div>
             </div>
+
+            <div class="pane-splitter" id="paneSplitter"></div>
 
             <!-- Editor Pane -->
             <div class="view-pane">
@@ -363,6 +619,7 @@
                             <option value="gemini">Gemini (Cloud)</option>
                             <option value="google_vision">Google Vision</option>
                             <option value="tesseract">Tesseract</option>
+                            <option value="surya">Surya OCR (Local, ~3 min/page)</option>
                         </select>
                         <button class="btn" id="reworkBtn" onclick="reworkCurrentPage()" style="padding: 2px 8px; font-size: 0.75rem; background: #6366f1; color: white; border: none; height: 24px;">REWORK</button>
                         <button class="btn kb-toggle-btn" id="kbToggleBtn" onclick="toggleTeluguKeyboard()" title="Telugu on-screen keyboard" style="padding: 2px 8px; font-size: 0.75rem; height: 24px;">⌨ తె</button>
@@ -375,9 +632,13 @@
                         <div class="spinner"></div>
                         <div style="color: #6366f1; font-weight: 600;">AI is reworking the page...</div>
                     </div>
-                    <textarea id="editor" placeholder="Start typing..."></textarea>
+                    <div class="editor-stack">
+                        <div id="editorHighlight" class="editor-highlight" aria-hidden="true"></div>
+                        <textarea id="editor" placeholder="Start typing..." spellcheck="false"></textarea>
+                    </div>
                     <div class="telugu-keyboard" id="teluguKeyboard"></div>
                 </div>
+            </div>
             </div>
         </main>
     </div>
@@ -389,12 +650,33 @@
         <button class="btn btn-primary" id="saveBtn" onclick="saveCurrentPage()">SAVE CHANGES</button>
     </div>
 
+    <div class="modal-backdrop" id="findReplaceBackdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span>Find &amp; Replace — across all pages in this book</span>
+                <button class="modal-close-btn" onclick="closeFindReplace()">✕</button>
+            </div>
+            <div class="modal-body">
+                <label class="modal-label">Find</label>
+                <input type="text" id="frFindInput" class="modal-input" placeholder="Text to search for (exact match)">
+                <label class="modal-label">Replace with</label>
+                <input type="text" id="frReplaceInput" class="modal-input" placeholder="Replacement text">
+                <div style="display:flex; gap:10px; margin-top: 12px;">
+                    <button class="btn btn-primary" onclick="findAcrossPages()">Search</button>
+                    <button class="btn" id="frReplaceAllBtn" onclick="confirmReplaceAll()" style="display:none; background:#dc2626; color:white; border:none;">Replace All</button>
+                </div>
+                <div id="frResults" style="margin-top: 16px;"></div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const JOB_ID = "{{ job_id }}";
         let currentPage = null;
         let pages = [];
         let hasChanges = false;
         let currentFilter = 'flagged'; // 'flagged' | 'all' — see setPageFilter()
+        let currentPageCorrections = []; // this page's {from, to} suggested-correction pairs
 
         function visiblePages() {
             return currentFilter === 'flagged' ? pages.filter(p => p.status === 'flagged') : pages;
@@ -465,7 +747,26 @@
             }
         }
 
+        function isReviewBannerCollapsed() {
+            try {
+                return localStorage.getItem('correctionReviewBannerCollapsed') === '1';
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function toggleReviewBanner() {
+            const collapsed = !isReviewBannerCollapsed();
+            try {
+                localStorage.setItem('correctionReviewBannerCollapsed', collapsed ? '1' : '0');
+            } catch (e) {}
+            renderPendingReviewBanner(lastReviewBannerCount);
+        }
+
+        let lastReviewBannerCount = 0;
+
         function renderPendingReviewBanner(count) {
+            lastReviewBannerCount = count;
             let banner = document.getElementById('pendingReviewBanner');
             if (count <= 0) {
                 if (banner) banner.remove();
@@ -474,14 +775,26 @@
             if (!banner) {
                 banner = document.createElement('div');
                 banner.id = 'pendingReviewBanner';
-                banner.style.cssText = "position: fixed; top: 78px; left: 50%; transform: translateX(-50%); background: #fef3c7; color: #92400e; padding: 0.6rem 1.25rem; border-radius: 8px; border: 1px solid #fde68a; z-index: 150; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 10px; max-width: 90vw;";
-                document.body.appendChild(banner);
+                // In normal document flow (inside #pendingReviewBannerSlot) — pushes
+                // the panes down instead of floating over them as position:fixed did.
+                banner.style.cssText = "background: #fef3c7; color: #92400e; padding: 0.6rem 1.25rem; border-radius: 8px; border: 1px solid #fde68a; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;";
+                document.getElementById('pendingReviewBannerSlot').appendChild(banner);
             }
+
+            if (isReviewBannerCollapsed()) {
+                banner.innerHTML =
+                    `<span>⚠️ ${count} page(s) need review</span>` +
+                    `<button type="button" onclick="rebuildBook()" style="flex-shrink: 0; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 6px; border: none; background: #059669; color: white; cursor: pointer; white-space: nowrap;">Build Ebook Now</button>` +
+                    `<button type="button" onclick="toggleReviewBanner()" title="Show details" style="margin-left: auto; flex-shrink: 0; padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #fde68a; background: transparent; color: #92400e; cursor: pointer;">▼</button>`;
+                return;
+            }
+
             // The prose alone ("click BUILD EBOOK") wasn't a strong enough cue that
             // building now, without reviewing every flagged page, is a valid and
             // supported action — add a direct button doing exactly that.
             banner.innerHTML = `<span>⚠️ ${count} page(s) have automatic spell-corrections awaiting your review (shown below by default). You don't have to review every page first — BUILD EBOOK builds with your current changes.</span>` +
-                `<button type="button" onclick="rebuildBook()" style="flex-shrink: 0; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 6px; border: none; background: #059669; color: white; cursor: pointer; white-space: nowrap;">Build Ebook Now</button>`;
+                `<button type="button" onclick="rebuildBook()" style="flex-shrink: 0; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 6px; border: none; background: #059669; color: white; cursor: pointer; white-space: nowrap;">Build Ebook Now</button>` +
+                `<button type="button" onclick="toggleReviewBanner()" title="Collapse" style="flex-shrink: 0; padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #fde68a; background: transparent; color: #92400e; cursor: pointer;">▲</button>`;
         }
 
         function renderPageList() {
@@ -521,6 +834,8 @@
 
             // Show loading
             document.getElementById('editor').value = "Loading page data...";
+            currentPageCorrections = [];
+            renderEditorHighlight();
             document.getElementById('pageLabel').innerText = `Page ${pageNum}`;
 
             try {
@@ -531,14 +846,169 @@
                 document.getElementById('engineLabel').innerText = `Engine: ${data.engine.toUpperCase()}`;
 
                 if (data.image) {
-                    document.getElementById('imageViewer').innerHTML = `<img src="data:image/jpeg;base64,${data.image}" />`;
+                    document.getElementById('imageViewer').innerHTML = `<img src="data:image/jpeg;base64,${data.image}" onclick="this.classList.toggle('zoomed')" title="Click to zoom in/out" />`;
                 } else {
                     document.getElementById('imageViewer').innerHTML = `<div style="color: white;">No image available</div>`;
                 }
 
-                renderCorrectionsPanel(data.dictionary_corrections || [], data.needs_manual_review);
+                currentPageCorrections = data.dictionary_corrections || [];
+                renderEditorHighlight();
+                renderCorrectionsPanel(currentPageCorrections, data.needs_manual_review);
             } catch (err) {
                 alert("Error loading page: " + err.message);
+            }
+        }
+
+        function escapeHtml(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function escapeRegExp(s) {
+            return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // A plain <textarea> can't style individual words inline, so the
+        // in-context highlight is a separate, identically-sized div stacked
+        // exactly behind it (see .editor-stack) showing the same text with
+        // <mark> around each suggested-correction word; the real, editable
+        // text sits on top, fully opaque, with a transparent background so
+        // the marks show through. Re-run on every keystroke so a highlight
+        // disappears once its word is edited away, rather than going stale.
+        function renderEditorHighlight() {
+            const text = document.getElementById('editor').value;
+            const overlay = document.getElementById('editorHighlight');
+            if (!currentPageCorrections.length) {
+                overlay.innerHTML = escapeHtml(text);
+                return;
+            }
+            // Longest word first so one correction's word can't chop up a
+            // shorter one nested inside another's match.
+            const words = [...new Set(currentPageCorrections.map(c => c.to).filter(Boolean))]
+                .sort((a, b) => b.length - a.length);
+            if (!words.length) {
+                overlay.innerHTML = escapeHtml(text);
+                return;
+            }
+            const pattern = new RegExp(words.map(escapeRegExp).join('|'), 'g');
+            let html = '';
+            let lastIndex = 0;
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                html += escapeHtml(text.slice(lastIndex, match.index));
+                html += `<mark>${escapeHtml(match[0])}</mark>`;
+                lastIndex = match.index + match[0].length;
+            }
+            html += escapeHtml(text.slice(lastIndex));
+            overlay.innerHTML = html;
+        }
+
+        function syncEditorScroll() {
+            const editor = document.getElementById('editor');
+            document.getElementById('editorHighlight').scrollTop = editor.scrollTop;
+            document.getElementById('editorHighlight').scrollLeft = editor.scrollLeft;
+        }
+
+        async function refreshPageListOnly() {
+            // Lighter-weight cousin of init() — updates the sidebar/counts
+            // without init()'s "jump to the first flagged/visible page"
+            // behavior, so a find & replace refresh doesn't yank the user
+            // away from whatever page they're currently looking at.
+            try {
+                const response = await fetch(`/api/correction/pages/${JOB_ID}`);
+                const data = await response.json();
+                if (data.error) return;
+                pages = data.pages;
+                document.getElementById('filterCountFlagged').innerText =
+                    `(${pages.filter(p => p.status === 'flagged').length})`;
+                document.getElementById('filterCountAll').innerText = `(${pages.length})`;
+                renderPageList();
+                renderPendingReviewBanner(data.pending_review_count || 0);
+            } catch (e) {}
+        }
+
+        function openFindReplace() {
+            document.getElementById('findReplaceBackdrop').style.display = 'flex';
+            document.getElementById('frResults').innerHTML = '';
+            document.getElementById('frReplaceAllBtn').style.display = 'none';
+            document.getElementById('frFindInput').focus();
+        }
+
+        function closeFindReplace() {
+            document.getElementById('findReplaceBackdrop').style.display = 'none';
+        }
+
+        async function findAcrossPages() {
+            const query = document.getElementById('frFindInput').value;
+            const resultsDiv = document.getElementById('frResults');
+            const replaceBtn = document.getElementById('frReplaceAllBtn');
+            replaceBtn.style.display = 'none';
+            if (!query) {
+                resultsDiv.innerHTML = '<div style="color:#dc2626;">Enter text to search for.</div>';
+                return;
+            }
+            resultsDiv.innerHTML = '<div style="color:#64748b;">Searching all pages…</div>';
+            try {
+                const resp = await fetch(`/api/correction/find_all/${JOB_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div style="color:#dc2626;">${escapeHtml(data.error)}</div>`;
+                    return;
+                }
+                if (data.total_matches === 0) {
+                    resultsDiv.innerHTML = '<div style="color:#64748b;">No matches found in any page.</div>';
+                    return;
+                }
+                const rows = data.results.map(r => {
+                    const snippetsHtml = r.snippets.map(s => {
+                        const marked = escapeHtml(s).replace(/⟦/g, '<mark>').replace(/⟧/g, '</mark>');
+                        return `<div class="fr-snippet">${marked}</div>`;
+                    }).join('');
+                    return `<div class="fr-page-row" onclick="closeFindReplace(); loadPage(${r.page_num})">
+                        <strong>Page ${r.page_num}</strong> — ${r.count} occurrence(s) (click to open)
+                        ${snippetsHtml}
+                    </div>`;
+                }).join('');
+                resultsDiv.innerHTML =
+                    `<div style="margin-bottom:8px; font-weight:600;">${data.total_matches} occurrence(s) across ${data.total_pages} page(s)</div>` +
+                    rows;
+                replaceBtn.style.display = 'inline-block';
+            } catch (err) {
+                resultsDiv.innerHTML = `<div style="color:#dc2626;">Search failed: ${err.message}</div>`;
+            }
+        }
+
+        async function confirmReplaceAll() {
+            const query = document.getElementById('frFindInput').value;
+            const replacement = document.getElementById('frReplaceInput').value;
+            if (!query) return;
+            if (!confirm(`Replace every occurrence of "${query}" with "${replacement}" across ALL matching pages in this book?\n\nThis writes directly to the saved results — review a few affected pages afterwards.`)) return;
+
+            const resultsDiv = document.getElementById('frResults');
+            resultsDiv.innerHTML = '<div style="color:#64748b;">Replacing across all pages…</div>';
+            try {
+                const resp = await fetch(`/api/correction/replace_all/${JOB_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, replacement })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div style="color:#dc2626;">${escapeHtml(data.error)}</div>`;
+                    return;
+                }
+                resultsDiv.innerHTML = `<div style="color:#059669; font-weight:600;">✓ Replaced ${data.total_replacements} occurrence(s) across ${data.pages_changed} page(s).</div>`;
+                document.getElementById('frReplaceAllBtn').style.display = 'none';
+
+                await refreshPageListOnly();
+                if (currentPage !== null && data.changed_page_nums.includes(currentPage)) {
+                    loadPage(currentPage);
+                }
+            } catch (err) {
+                resultsDiv.innerHTML = `<div style="color:#dc2626;">Replace failed: ${err.message}</div>`;
             }
         }
 
@@ -563,11 +1033,12 @@
 
         async function reworkCurrentPage() {
             if (!currentPage) return;
-            if (!confirm(`Rework Page ${currentPage} with ${document.getElementById('engineSelect').value}? Current text will be replaced.`)) return;
+            const engine = document.getElementById('engineSelect').value;
+            const slowNote = engine === 'surya' ? ' This engine runs locally and takes about 3 minutes — the page will stay open and busy until it finishes.' : '';
+            if (!confirm(`Rework Page ${currentPage} with ${engine}? Current text will be replaced.${slowNote}`)) return;
 
             const overlay = document.getElementById('reworkOverlay');
-            const engine = document.getElementById('engineSelect').value;
-            
+
             overlay.style.display = 'flex';
 
             try {
@@ -725,7 +1196,9 @@
                 hasChanges = true;
                 document.getElementById('saveStatus').innerText = "Unsaved changes";
             }
+            renderEditorHighlight();
         });
+        document.getElementById('editor').addEventListener('scroll', syncEditorScroll);
 
         // Shortcuts
         document.addEventListener('keydown', (e) => {
@@ -777,13 +1250,106 @@
             const end = editor.selectionEnd;
             editor.value = editor.value.slice(0, start) + ch + editor.value.slice(end);
             const newPos = start + ch.length;
-            editor.focus();
+            // preventScroll: true -- without it, the browser auto-scrolls the
+            // pane to bring the (already-visible) textarea into view on every
+            // keypress, snapping back up and away from the on-screen keyboard
+            // rows the user just scrolled down to reach.
+            editor.focus({ preventScroll: true });
             editor.setSelectionRange(newPos, newPos);
             // Reuse the same 'input' event path as typing, so hasChanges tracking fires
             editor.dispatchEvent(new Event('input'));
         }
 
+        function applySidebarToggleState(collapsed) {
+            const btn = document.getElementById('sidebarEdgeToggle');
+            btn.style.left = collapsed ? '-14px' : 'calc(var(--sidebar-width) - 14px)';
+            btn.textContent = collapsed ? '▶' : '◀';
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('collapsed');
+            const collapsed = sidebar.classList.contains('collapsed');
+            applySidebarToggleState(collapsed);
+            try {
+                localStorage.setItem('correctionSidebarCollapsed', collapsed ? '1' : '0');
+            } catch (e) {}
+        }
+
+        function restoreSidebarState() {
+            let collapsed = false;
+            try {
+                collapsed = localStorage.getItem('correctionSidebarCollapsed') === '1';
+            } catch (e) {}
+            if (collapsed) {
+                document.getElementById('sidebar').classList.add('collapsed');
+            }
+            applySidebarToggleState(collapsed);
+        }
+
+        function setupPaneSplitter() {
+            const splitter = document.getElementById('paneSplitter');
+            const imagePane = document.getElementById('imagePane');
+            const row = document.querySelector('.panes-row');
+            if (!splitter || !imagePane || !row) return;
+
+            // Restore a previously-chosen split ratio (per-browser convenience only).
+            try {
+                const saved = localStorage.getItem('correctionPaneSplit');
+                if (saved) imagePane.style.flexBasis = saved;
+            } catch (e) {}
+
+            let dragging = false;
+
+            function onMove(clientX) {
+                const rowRect = row.getBoundingClientRect();
+                const splitterWidth = splitter.offsetWidth;
+                let ratio = (clientX - rowRect.left) / (rowRect.width - splitterWidth);
+                ratio = Math.min(0.8, Math.max(0.2, ratio));
+                imagePane.style.flexBasis = (ratio * 100) + '%';
+            }
+
+            splitter.addEventListener('mousedown', (e) => {
+                dragging = true;
+                splitter.classList.add('dragging');
+                document.body.classList.add('pane-resizing');
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                onMove(e.clientX);
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                splitter.classList.remove('dragging');
+                document.body.classList.remove('pane-resizing');
+                try {
+                    localStorage.setItem('correctionPaneSplit', imagePane.style.flexBasis);
+                } catch (e) {}
+            });
+
+            // Touch support
+            splitter.addEventListener('touchstart', () => { dragging = true; splitter.classList.add('dragging'); }, { passive: true });
+            window.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                onMove(e.touches[0].clientX);
+            }, { passive: true });
+            window.addEventListener('touchend', () => {
+                if (!dragging) return;
+                dragging = false;
+                splitter.classList.remove('dragging');
+                try {
+                    localStorage.setItem('correctionPaneSplit', imagePane.style.flexBasis);
+                } catch (e) {}
+            });
+        }
+
         buildTeluguKeyboard();
+        setupPaneSplitter();
+        restoreSidebarState();
         init();
     </script>
 </body>

@@ -112,7 +112,7 @@ class FullyAdaptiveComplexityAnalyzer(PageComplexityAnalyzer):
         # 1. Layout figures
         from layout_analyzer import LayoutAnalyzer
         layout_analyzer = LayoutAnalyzer()
-        crops, coords = layout_analyzer.extract_figures(image)
+        crops, coords, _ = layout_analyzer.extract_figures(image)
         
         # 2. Adaptive binary masked
         binary = cv2.adaptiveThreshold(

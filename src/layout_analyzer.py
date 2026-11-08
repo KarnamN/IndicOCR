@@ -128,15 +128,21 @@ class LayoutAnalyzer:
             
         return result_dict
 
-    def extract_figures(self, image: Image.Image) -> Tuple[List[Image.Image], List[Tuple[int, int, int, int]]]:
+    def extract_figures(self, image: Image.Image) -> Tuple[List[Image.Image], List[Tuple[int, int, int, int]], Dict[str, List[Dict]]]:
         """
         Run layout analysis and return precisely cropped figure images.
 
         Returns:
             crops  — list of PIL Images, one per detected figure region
             coords — list of (x1, y1, x2, y2) tuples for each crop
+            layout — the full analyze() result for this image (title/text/figure/
+                     table/garbage boxes), so callers that need those boxes later
+                     (e.g. to build positional EPUB content blocks) can reuse this
+                     one inference instead of calling analyze() again on the same
+                     image — the model forward-pass is the expensive part, not the
+                     cropping.
 
-        If the layout model is unavailable, returns ([], []).
+        If the layout model is unavailable, returns ([], [], empty layout dict).
         """
         crops: List[Image.Image] = []
         coords: List[Tuple[int, int, int, int]] = []
@@ -193,7 +199,7 @@ class LayoutAnalyzer:
             except Exception as e:
                 logger.warning(f"Figure crop failed: {e}")
 
-        return crops, coords
+        return crops, coords, layout
 
     def get_text_mask(self, image: Image.Image,
                       figure_coords: Optional[List[Tuple[int, int, int, int]]] = None) -> Image.Image:
@@ -212,7 +218,7 @@ class LayoutAnalyzer:
             New PIL Image with figure regions blanked to white.
         """
         if figure_coords is None:
-            _, figure_coords = self.extract_figures(image)
+            _, figure_coords, _ = self.extract_figures(image)
 
         if not figure_coords:
             return image  # nothing to mask — return original unchanged

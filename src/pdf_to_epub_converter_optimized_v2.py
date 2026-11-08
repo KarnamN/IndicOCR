@@ -27,6 +27,7 @@ from adaptive_ocr_factory import AdaptiveOCRFactory
 from page_complexity_analyzer import PageComplexityAnalyzer
 from layout_analyzer import LayoutAnalyzer
 from telugu_post_processor import post_process_telugu, post_process_telugu_with_corrections
+from telugu_text_processor import get_telugu_text_processor
 from cleanup_manager import CleanupManager
 
 from logging_config import get_logger
@@ -120,6 +121,16 @@ class OptimizedPDFToEPUBConverter:
         # ADAPTIVE TESSERACT_MIN_SAFE_LINES TRACKER
         self._clean_page_line_counts = []
         self._line_count_lock = threading.Lock()
+
+        # PER-THREAD PDF DOCUMENT CACHE
+        # fitz.Document isn't safe to share across threads, so each
+        # ThreadPoolExecutor worker thread keeps its own handle (via
+        # _get_doc_for_thread) opened once and reused for every page that
+        # thread processes, instead of _convert_single_page reopening and
+        # re-parsing the PDF's xref table from disk on every single page.
+        self._page_doc_tls = threading.local()
+        self._page_docs_lock = threading.Lock()
+        self._page_docs_registry = []  # all opened Documents, for cleanup
 
         # STAGE-2 (OCR) CONCURRENCY SUB-THROTTLE
         # The outer thread pool (self.max_workers, sized in convert_streaming) caps
@@ -369,6 +380,7 @@ class OptimizedPDFToEPUBConverter:
             # docs/TELUGU_SPELL_CORRECTION_TODO.md. Empty/False when the feature is
             # off or this page had no corrections.
             'dictionary_corrections': page_result.get('dictionary_corrections', []),
+            'structural_issues': page_result.get('structural_issues', 0),
             'needs_manual_review': page_result.get('needs_manual_review', False),
             'needs_gemini_validation': page_result.get('needs_gemini_validation', False),
         }
@@ -723,20 +735,64 @@ class OptimizedPDFToEPUBConverter:
             
         return is_junk
 
+    def _get_doc_for_thread(self, pdf_path: Path) -> fitz.Document:
+        """
+        Return a fitz.Document for pdf_path, cached on the current thread.
+
+        fitz.Document isn't safe to share across threads, so this keeps one
+        handle per thread (threading.local) rather than one instance
+        attribute — each worker thread opens the PDF once and reuses it for
+        every page it's assigned, instead of _convert_single_page reopening
+        the file and re-parsing its xref table on every call.
+        """
+        cached_doc = getattr(self._page_doc_tls, 'doc', None)
+        cached_path = getattr(self._page_doc_tls, 'path', None)
+        if cached_doc is not None and cached_path == pdf_path:
+            return cached_doc
+
+        if cached_doc is not None:
+            # Same thread, different PDF (e.g. a long-lived Flask worker
+            # thread handling successive jobs) — close the stale handle
+            # instead of leaking it.
+            try:
+                cached_doc.close()
+            except Exception:
+                pass
+            with self._page_docs_lock:
+                if cached_doc in self._page_docs_registry:
+                    self._page_docs_registry.remove(cached_doc)
+
+        doc = fitz.open(pdf_path)
+        self._page_doc_tls.doc = doc
+        self._page_doc_tls.path = pdf_path
+        with self._page_docs_lock:
+            self._page_docs_registry.append(doc)
+        return doc
+
+    def _close_page_docs(self):
+        """Close every per-thread fitz.Document opened by _get_doc_for_thread."""
+        with self._page_docs_lock:
+            docs, self._page_docs_registry = self._page_docs_registry, []
+        for doc in docs:
+            try:
+                doc.close()
+            except Exception:
+                pass
+
     def _convert_single_page(self, pdf_path: Path, page_num: int) -> Image.Image:
         """
         Convert a single PDF page to image (streaming)
-        
+
         Args:
             pdf_path: Path to PDF file
             page_num: Page number (0-indexed)
-            
+
         Returns:
             PIL Image of the page
         """
         try:
             # Use PyMuPDF (fitz) to convert single page - MUCH faster than pdf2image
-            doc = fitz.open(pdf_path)
+            doc = self._get_doc_for_thread(pdf_path)
             page = doc.load_page(page_num)
             
             # Calculate zoom based on DPI (72 is default PDF DPI)
@@ -761,14 +817,13 @@ class OptimizedPDFToEPUBConverter:
             
             # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            doc.close()
+
             return img
-            
+
         except Exception as e:
             logger.error(f"Failed to convert page {page_num + 1}: {e}")
             return None
-    
+
     def _ocr_cells_parallel(self, cells: List[List[Image.Image]]) -> List[List[str]]:
         """
         OCR table cells in parallel
@@ -905,9 +960,13 @@ class OptimizedPDFToEPUBConverter:
             layout_figure_crops: List[Image.Image] = []
             figure_coords: List[Tuple[int,int,int,int]] = []
             image_for_analysis = page_image  # default: use original
+            # Full title/text/figure/table boxes from this same inference, reused
+            # below when building positional EPUB content blocks instead of
+            # re-running the layout model a second time on the same page_image.
+            cached_full_layout: Optional[Dict[str, List[Dict]]] = None
 
             try:
-                layout_figure_crops, figure_coords = self.layout_analyzer.extract_figures(page_image)
+                layout_figure_crops, figure_coords, cached_full_layout = self.layout_analyzer.extract_figures(page_image)
                 if layout_figure_crops:
                     logger.info(
                         f"  ✂️  Layout: {len(layout_figure_crops)} figure(s) pre-extracted. "
@@ -1413,6 +1472,38 @@ class OptimizedPDFToEPUBConverter:
                     text = post_process_telugu(text)
                 if text != original_text:
                     logger.debug(f"  🔤 Telugu post-processing applied")
+
+                # Second, independent review signal alongside the dictionary-
+                # correction count above. That signal only fires when a word
+                # lands close enough to a dictionary entry to be worth
+                # correcting — a page can have zero dictionary corrections
+                # (every word happens to already look dictionary-plausible)
+                # and still contain real, severe errors that just don't take
+                # that shape. Confirmed on a real page during a manual audit
+                # against the source scan (2026-09-26, Prema Kiranam page 65):
+                # 0 dictionary_corrections logged, 15+ real errors on
+                # inspection, several structurally impossible in real Telugu
+                # (e.g. లె్కలు, అనురాగా్నీ — an orphaned matra or dangling
+                # virama with no nearby dictionary word for the corrector to
+                # snap onto). grapheme_validity_score() already exists and is
+                # validated (near-zero false-positive rate on real books) in
+                # the offline review_queue.py diagnostics — this wires that
+                # same, already-proven check into the production review gate;
+                # it is not new detection logic.
+                #
+                # Uses an absolute invalid_count, not review_queue.py's
+                # line-level 0.05 invalid_ratio: at whole-page scale
+                # (hundreds to low thousands of Telugu chars) a couple of real
+                # corruptions get diluted into a ratio far below 0.05, so a
+                # ratio threshold calibrated on single lines would almost
+                # never fire here.
+                if getattr(config, 'ENABLE_TELUGU_STRUCTURAL_REVIEW_SIGNAL', True):
+                    from telugu_text_processor import get_telugu_text_processor
+                    validity = get_telugu_text_processor().grapheme_validity_score(text)
+                    min_invalid = getattr(config, 'STRUCTURAL_REVIEW_MIN_INVALID', 1)
+                    if validity['invalid_count'] >= min_invalid:
+                        result['structural_issues'] = validity['invalid_count']
+                        result['needs_manual_review'] = True
             result['text'] = text
             
             # --- CHARACTER ANALYSIS FOR UI ---
@@ -1615,8 +1706,12 @@ class OptimizedPDFToEPUBConverter:
             layout_figure_coords = analysis.get('layout_figure_coords', [])
             if layout_figure_coords and layout_figure_crops:
                 try:
-                    # Get full layout from analyzer (already ran earlier — reuse engine cache)
-                    full_layout = self.layout_analyzer.analyze(page_image)
+                    # Reuse the layout inference from the extract_figures() call
+                    # earlier in this same page (cached_full_layout) instead of
+                    # running the layout model on page_image a second time.
+                    # Falls back to a fresh call only if that earlier call didn't
+                    # run or didn't populate it (e.g. the try block above raised).
+                    full_layout = cached_full_layout if cached_full_layout else self.layout_analyzer.analyze(page_image)
                     page_h_for_blocks = page_image.height
                     content_blocks = []
 
@@ -2187,7 +2282,12 @@ class OptimizedPDFToEPUBConverter:
                     
                     if self._cancelled.is_set():
                         break
-            
+
+            # All worker threads (parallel or sequential) are done with
+            # pdf_path now — close every per-thread Document opened by
+            # _get_doc_for_thread so the file handles don't linger.
+            self._close_page_docs()
+
             # Check if cancelled — do NOT build EPUB/MOBI with incomplete pages
             if self._cancelled.is_set():
                 pages_processed = len(self.page_result_paths)
@@ -2281,6 +2381,21 @@ class OptimizedPDFToEPUBConverter:
                 except Exception as e:
                     logger.warning(f"Failed to write quality report: {e}")
 
+            # ── Re-correction pass over saved results ───────────────────────
+            # Run here, before the review gate right below reads
+            # needs_manual_review from disk, so a fresh conversion's gating
+            # decision reflects the repaired flags, not the stale per-page-
+            # only ones. rebuild_book_from_results() (Step 4 below, and the
+            # app's separate resume-folder -> "Rebuild Book" flow) also calls
+            # reprocess_saved_pages_corrections() itself, so a book rebuilt
+            # from an old results folder gets the same repair without having
+            # gone through this method first. Safe to run twice in one
+            # convert_streaming call — see that method's docstring.
+            if getattr(config, 'ENABLE_TELUGU_DICTIONARY_CORRECTION', False) and getattr(
+                config, 'ENABLE_BOOK_LEVEL_CORRECTION_PASS', True
+            ):
+                self.reprocess_saved_pages_corrections()
+
             # ── Dictionary-correction review gate ───────────────────────────
             # Pages with unreviewed dictionary corrections (see
             # docs/TELUGU_SPELL_CORRECTION_TODO.md) block the automatic build —
@@ -2334,6 +2449,17 @@ class OptimizedPDFToEPUBConverter:
                     page_num = int(parts[0])
                     sub_idx = int(parts[1]) if len(parts) > 1 else 0
                     self.page_result_paths[(page_num, sub_idx)] = f
+
+            # Re-apply the current Telugu correction logic to every saved
+            # page before building — this is what makes "resume an old
+            # book's folder, then click Rebuild Book" actually pick up
+            # post-processing fixes made after that book was first
+            # converted, with no re-OCR needed. Skips any page a human
+            # already manually corrected (see that method).
+            if getattr(config, 'ENABLE_TELUGU_DICTIONARY_CORRECTION', False) and getattr(
+                config, 'ENABLE_BOOK_LEVEL_CORRECTION_PASS', True
+            ):
+                self.reprocess_saved_pages_corrections()
 
             logger.info(f"Building EPUB from {len(self.page_result_paths)} results...")
             
@@ -2394,6 +2520,83 @@ class OptimizedPDFToEPUBConverter:
             logger.error(f"Rebuild failed: {e}")
             return False
 
+    def reprocess_saved_pages_corrections(self) -> int:
+        """
+        Re-run Telugu dictionary/stroke correction on every already-saved
+        page's text, in place, without re-running OCR.
+
+        This is how a book converted before a post-processing fix landed
+        gets the benefit of that fix: it re-reads each page's current text
+        from its .jbl file, runs it through post_process_telugu_with_corrections()
+        again, and overwrites the .jbl (and its _text.json debug export) if
+        anything changed. Called from convert_streaming() right after a
+        fresh conversion's pages are all saved, and from
+        rebuild_book_from_results() so resuming an old results folder and
+        clicking "Rebuild Book" in the app gets the same repair.
+
+        Skips any page with manual_correction=True (set by
+        /api/correction/save when a human edits a page in the correction
+        dashboard) — never overwrite a human's edit with an automated one.
+
+        Safe to re-run on already-corrected text: a token the corrector
+        already fixed is now a real dictionary word, so is_known_word()
+        short-circuits it: it won't be touched again.
+
+        Tried and rejected here: book-wide word-frequency counting (see
+        docs — telugu_text_processor.compute_book_token_frequency exists but
+        is intentionally not used for this). Measured against a real book
+        (2026-09-26): it doesn't reliably separate a repeated proper noun
+        from a common word with a systematic (100%-consistent) OCR defect —
+        both repeat similarly often across a whole book, and no threshold
+        keeps one out without also blocking the other. So this only uses
+        the narrower, already-validated per-page repeat guard inside
+        correct_spelling() itself. Known, accepted residual gap: a name
+        that repeats across many pages but never more than once on any
+        single page can still get wrongly "corrected".
+
+        Returns the number of pages actually changed.
+        """
+        if not self.page_result_paths:
+            return 0
+
+        text_processor = get_telugu_text_processor()
+        gemini_threshold = getattr(config, 'DICTIONARY_CORRECTION_GEMINI_THRESHOLD', 10)
+        min_invalid = getattr(config, 'STRUCTURAL_REVIEW_MIN_INVALID', 1)
+        changed_pages = 0
+
+        for _key, path in sorted(self.page_result_paths.items()):
+            try:
+                page_data = joblib.load(path)
+            except Exception:
+                continue
+            if page_data.get('manual_correction'):
+                continue  # never overwrite a human-reviewed page
+            old_text = page_data.get('text', '')
+            if not old_text.strip():
+                continue
+
+            new_text, dictionary_corrections = post_process_telugu_with_corrections(old_text)
+            validity = text_processor.grapheme_validity_score(new_text)
+            needs_review = bool(dictionary_corrections) or validity['invalid_count'] >= min_invalid
+            needs_gemini_validation = len(dictionary_corrections) >= gemini_threshold
+
+            if new_text != old_text or needs_review != page_data.get('needs_manual_review', False):
+                page_data['text'] = new_text
+                page_data['dictionary_corrections'] = dictionary_corrections
+                page_data['structural_issues'] = validity['invalid_count']
+                page_data['needs_manual_review'] = needs_review
+                page_data['needs_gemini_validation'] = needs_gemini_validation
+                joblib.dump(page_data, path)
+                try:
+                    self._export_page_text_json(page_data)
+                except Exception:
+                    pass
+                changed_pages += 1
+
+        if changed_pages:
+            logger.info(f"📖 Re-correction pass updated {changed_pages} page(s)")
+        return changed_pages
+
     def rework_page(self, pdf_path: Path, page_num: int, engine_name: str = 'gemini',
                     sub_idx: int = 0) -> Dict:
         """
@@ -2407,7 +2610,7 @@ class OptimizedPDFToEPUBConverter:
                 matching process_page_optimized()'s convention — NOT repair_book()'s
                 1-indexed EPUB-chapter convention)
             page_num: 0-indexed PDF page number
-            engine_name: 'gemini', 'google_vision', or 'tesseract'
+            engine_name: 'gemini', 'google_vision', 'tesseract', or 'surya'
             sub_idx: which half of a double-page-split spread to target (0 or 1).
                 Re-runs the same page_splitter split process_page_optimized() used
                 originally and picks this half, rather than OCRing the whole raw
@@ -2452,8 +2655,18 @@ class OptimizedPDFToEPUBConverter:
             text = processor.extract_text(target_image)
         elif engine_name == 'tesseract':
             text = self.ocr_processor.extract_text(target_image, page_label=f"Rework Page {page_num + 1}")
+        elif engine_name == 'surya':
+            from surya_ocr_processor import SuryaOCRProcessor
+            processor = SuryaOCRProcessor()
+            if not processor.is_available:
+                raise RuntimeError(
+                    "Surya OCR not available — run scripts/install_surya.bat "
+                    "(installs into the shared WSL venv + llama.cpp binary)"
+                )
+            logger.info(f"    Page {page_num + 1}: running Surya OCR (~3 min/page, please wait)...")
+            text = processor.extract_text(target_image)
         else:
-            raise ValueError(f"Unknown rework engine: {engine_name!r} (expected gemini, google_vision, or tesseract)")
+            raise ValueError(f"Unknown rework engine: {engine_name!r} (expected gemini, google_vision, tesseract, or surya)")
 
         if getattr(config, 'ENABLE_TELUGU_POST_PROCESSING', False) and text:
             text = post_process_telugu(text)

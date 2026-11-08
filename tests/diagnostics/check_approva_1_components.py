@@ -25,7 +25,7 @@ if img_path.exists():
         for i, box in enumerate(boxes):
             print(f"    Box {i+1}: {box}")
             
-    crops, coords = analyzer.extract_figures(image)
+    crops, coords, _ = analyzer.extract_figures(image)
     print(f"\nExtracted figures count: {len(crops)}")
     for i, c in enumerate(coords):
          print(f"  Figure {i+1}: {c}")

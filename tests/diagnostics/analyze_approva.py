@@ -28,7 +28,7 @@ if img_path.exists():
             
     # 2. Extract Figures
     print("\n--- Extracting Figures ---")
-    crops, coords = analyzer.extract_figures(image)
+    crops, coords, _ = analyzer.extract_figures(image)
     print(f"Extracted {len(crops)} figures:")
     for i, coord in enumerate(coords):
         print(f"  Figure {i+1} coordinates: {coord}")

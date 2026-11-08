@@ -392,6 +392,32 @@ class TeluguTextProcessor:
                         'type': 'dangling_vattu',
                         'context': text[max(0, i - 1):i + 3],
                     })
+                    continue
+                # A consonant DOES follow (syntactically looks like a normal
+                # subjoined conjunct) -- but if the character immediately
+                # BEFORE this virama is itself a vowel sign, the conjunct
+                # landed on the wrong side of it. In a valid akshara the
+                # vowel sign is always the LAST mark (segment_graphemes
+                # enforces the same rule: at most one trailing matra, after
+                # any vattu pairs, never before) -- once a consonant has
+                # taken its matra, no further subjoined consonant can attach
+                # to that same akshara. Found 2026-09-26 auditing real book
+                # pages: లె్కలు (ల+ె+్+క..., "లె" already has its matra, so
+                # the ్క that follows can't be a real conjunct on it) and
+                # అనురాగా్నీ read as valid by both this check's original two
+                # rules -- dangling_vattu only looks at what follows the
+                # virama (a consonant does, so it passed) and
+                # orphaned_gunintham only looks at what precedes a vowel
+                # sign (a consonant does, so it also passed). Neither rule
+                # alone sees this shape; it only shows up in the combination.
+                prev_char = text[i - 1] if i > 0 else ''
+                if self.is_gunintham(prev_char):
+                    issues.append({
+                        'position': i,
+                        'char': char,
+                        'type': 'vattu_after_matra',
+                        'context': text[max(0, i - 2):i + 3],
+                    })
 
         return issues
 
@@ -486,6 +512,31 @@ class TeluguTextProcessor:
                 i += 1
         return clusters
 
+    def _decompose_cluster(self, cluster: str) -> Optional[Tuple[str, str, str]]:
+        """
+        Split a single akshara grapheme cluster (as produced by segment_graphemes)
+        into (base_consonant, vattu_span, trailing_matra).
+
+        vattu_span is the raw "(virama+consonant)*" middle portion (empty string
+        if the akshara has no stacked conjunct); trailing_matra is the single
+        dependent vowel sign at the end, or a word-final virama, or '' if
+        neither. Returns None if `cluster` doesn't start with a consonant (not
+        an akshara cluster at all — e.g. a lone anusvara or punctuation mark
+        gets its own single-character "cluster" from segment_graphemes).
+
+        Exists so classify_single_stroke_edit can compare a missing/extra vattu
+        independently of a trailing matra — see that method's docstring for why
+        a plain string comparison gets this wrong whenever both are present.
+        """
+        if not cluster or not self.is_consonant(cluster[0]):
+            return None
+        n = len(cluster)
+        i = 1
+        vattu_start = i
+        while i + 1 < n and self.is_vattu(cluster[i]) and self.is_consonant(cluster[i + 1]):
+            i += 2
+        return cluster[0], cluster[vattu_start:i], cluster[i:]
+
     def classify_single_stroke_edit(self, original: str, corrected: str) -> Optional[str]:
         """
         Classify whether `corrected` differs from `original` by exactly one
@@ -499,10 +550,24 @@ class TeluguTextProcessor:
         cluster count, just one cluster shortened. So the real signature is "same
         cluster count, exactly one cluster differs, and the two differing
         clusters are related by one being the other plus exactly one trailing
-        matra or one trailing (vattu+consonant) pair." Any other single-cluster
+        matra or one (vattu+consonant) pair." Any other single-cluster
         difference is a genuine different-word substitution, not a dropped
         stroke, and is intentionally left unclassified (returns None) — that's
         a different, riskier correction problem this method does not attempt.
+
+        The vattu check compares decomposed (base, vattu_span, trailing_matra)
+        triples rather than raw strings. A plain `c.startswith(o)` check (the
+        original implementation) only works when the akshara has no trailing
+        matra: Telugu Unicode order is base+virama+vattu-consonant+matra, so a
+        missing vattu on an akshara that *does* carry a trailing matra is an
+        insertion in the *middle* of the cluster (డి -> డ్రి, i.e. డ+ి ->
+        డ+్+ర+ి) — the corrected string does not start with the original one
+        (second char ్ vs ి), so the old check silently missed this shape
+        entirely. This was the majority case in a real-book audit (2026-09-26):
+        of the "్ర misread/dropped" instances found by hand, most were on
+        akshara that also carried a trailing vowel sign (తండ్రి->తండి,
+        మాత్రమే->మాతమే, సూర్యప్రకాశరావు->సూర్యపకాశరావు), not the bare-consonant
+        shape (గ్రంథము->గంథము) this method was originally validated against.
 
         Returns one of 'missing_matra', 'extra_matra', 'missing_vattu',
         'extra_vattu', or None if the edit doesn't match one of those patterns.
@@ -521,10 +586,19 @@ class TeluguTextProcessor:
             return 'missing_matra'
         if len(o) == len(c) + 1 and o.startswith(c) and self.is_gunintham(o[-1]):
             return 'extra_matra'
-        if len(c) == len(o) + 2 and c.startswith(o) and self.is_vattu(c[-2]) and self.is_consonant(c[-1]):
-            return 'missing_vattu'
-        if len(o) == len(c) + 2 and o.startswith(c) and self.is_vattu(o[-2]) and self.is_consonant(o[-1]):
-            return 'extra_vattu'
+
+        o_parts = self._decompose_cluster(o)
+        c_parts = self._decompose_cluster(c)
+        if o_parts and c_parts:
+            o_base, o_vattu, o_matra = o_parts
+            c_base, c_vattu, c_matra = c_parts
+            if o_base == c_base and o_matra == c_matra:
+                if (len(c_vattu) == len(o_vattu) + 2 and c_vattu.startswith(o_vattu)
+                        and self.is_vattu(c_vattu[-2]) and self.is_consonant(c_vattu[-1])):
+                    return 'missing_vattu'
+                if (len(o_vattu) == len(c_vattu) + 2 and o_vattu.startswith(c_vattu)
+                        and self.is_vattu(o_vattu[-2]) and self.is_consonant(o_vattu[-1])):
+                    return 'extra_vattu'
         return None
 
     def normalize_text(self, text: str) -> str:
@@ -638,6 +712,43 @@ def dictionary_lookup_candidate(token: str, text_processor: TeluguTextProcessor)
     if len(text_processor.segment_graphemes(stripped)) < 3:
         return None
     return stripped
+
+
+def compute_book_token_frequency(texts, text_processor: Optional["TeluguTextProcessor"] = None) -> "Counter[str]":
+    """
+    Count how many times each dictionary-eligible token form (see
+    dictionary_lookup_candidate) appears across `texts` — normally every
+    page of the same book, not just one page.
+
+    Exists so TeluguPostProcessor.correct_spelling()'s repeat-guard (protects
+    a repeated word/name from its widened stroke-correction match) can see
+    repeats across a whole book, not only within whatever single page is
+    being corrected. Found live (2026-09-26): a page-local count alone missed
+    a character's name repeating across a real book because it happened to
+    appear only once on most individual pages, even though it appeared 11
+    times across the book as a whole.
+
+    Args:
+        texts: iterable of page texts (e.g. every page's OCR text for one book).
+        text_processor: reuses the shared singleton if not given.
+
+    Returns:
+        Counter mapping each eligible token form to its count across all of
+        `texts` combined.
+    """
+    from collections import Counter as _Counter
+
+    tp = text_processor or get_telugu_text_processor()
+    counts: _Counter = _Counter()
+    for text in texts:
+        if not text:
+            continue
+        for line in text.split('\n'):
+            for tok in line.split(' '):
+                candidate = dictionary_lookup_candidate(tok, tp)
+                if candidate is not None:
+                    counts[candidate] += 1
+    return counts
 
 
 def test_telugu_processor():

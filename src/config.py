@@ -145,6 +145,28 @@ ENABLE_CONJUNCT_RA_WORD_INITIAL_FIX = True  # Dictionary-gated fix for "్ర" 
                                           # hand-checked samples, zero false positives) — see
                                           # TeluguPostProcessor.fix_word_initial_conjunct_ra().
 
+STRUCTURAL_REVIEW_MIN_INVALID = 1        # A page with at least this many structurally-impossible
+                                          # grapheme sequences (orphaned matra / dangling virama, see
+                                          # TeluguTextProcessor.grapheme_validity_score) is flagged for
+                                          # manual review, independent of the dictionary-correction
+                                          # count above. Added 2026-09-26: found live that a page can
+                                          # have zero dictionary corrections (every word happens to
+                                          # look dictionary-plausible) and still contain real,
+                                          # structurally-broken errors the dictionary signal can't see.
+ENABLE_BOOK_LEVEL_CORRECTION_PASS = True  # After all of a book's pages finish OCR, re-run Telugu
+                                          # dictionary/stroke correction once more over every already-
+                                          # saved page and overwrite the stored results. NOT a book-wide
+                                          # word-frequency pass — that was tried and measured against a
+                                          # real book (2026-09-26) to not reliably separate a repeated
+                                          # proper noun from a common word with a systematic OCR defect
+                                          # (see the long comment at this flag's call site in
+                                          # pdf_to_epub_converter_optimized_v2.py for the real numbers).
+                                          # What this still does: re-applies the current correction
+                                          # logic to every page without re-running OCR, so a book whose
+                                          # pages were saved before a post-processing fix landed can be
+                                          # repaired in place. Only takes effect when
+                                          # ENABLE_TELUGU_DICTIONARY_CORRECTION is also on.
+
 ENABLE_GEMINI_REFERENCE_GROUNDING = False  # Give Gemini both Paddle's and Tesseract's independent readings
                                           # of the page (+ where they disagree) alongside the image, instead
                                           # of transcribing from a blank slate. Targets a confirmed
@@ -395,6 +417,18 @@ GOOGLE_VISION_MONTHLY_QUOTA = 1000           # Free tier limit
 
 # Check if Google Vision is usable (disabled: requires billing to be enabled on GCP)
 GOOGLE_VISION_AVAILABLE = False
+
+# ═══════════════════════════════════════════════════════
+#  SURYA OCR (Local VLM manual-rescue engine)
+# ═══════════════════════════════════════════════════════
+# Investigated 2026-09-26: verified word-for-word correct against source scans
+# on the two worst pages in a real book, but ~180-215s/page on this project's
+# CPU-only WSL box (no GPU here) — far too slow to run automatically on every
+# page, or even on every page flagged "needs review" (measured 117/121 pages
+# flagged on one real book — automating it there would cost as much as running
+# it on the whole book). Manual REWORK-button engine only for now, same as
+# 'google_vision'/'gemini'. Install via scripts/install_surya.bat.
+SURYA_LLAMA_CPP_BINARY = os.environ.get('SURYA_LLAMA_CPP_BINARY', '')  # '' = use surya_ocr_processor.py's default path
 
 # ═══════════════════════════════════════════════════════
 #  PREMIUM QUOTA MANAGEMENT
