@@ -122,6 +122,16 @@ class OptimizedPDFToEPUBConverter:
         self._clean_page_line_counts = []
         self._line_count_lock = threading.Lock()
 
+        # PER-THREAD PDF DOCUMENT CACHE
+        # fitz.Document isn't safe to share across threads, so each
+        # ThreadPoolExecutor worker thread keeps its own handle (via
+        # _get_doc_for_thread) opened once and reused for every page that
+        # thread processes, instead of _convert_single_page reopening and
+        # re-parsing the PDF's xref table from disk on every single page.
+        self._page_doc_tls = threading.local()
+        self._page_docs_lock = threading.Lock()
+        self._page_docs_registry = []  # all opened Documents, for cleanup
+
         # STAGE-2 (OCR) CONCURRENCY SUB-THROTTLE
         # The outer thread pool (self.max_workers, sized in convert_streaming) caps
         # total concurrent pages, which naturally bounds Stage-1 (analysis +
@@ -725,20 +735,64 @@ class OptimizedPDFToEPUBConverter:
             
         return is_junk
 
+    def _get_doc_for_thread(self, pdf_path: Path) -> fitz.Document:
+        """
+        Return a fitz.Document for pdf_path, cached on the current thread.
+
+        fitz.Document isn't safe to share across threads, so this keeps one
+        handle per thread (threading.local) rather than one instance
+        attribute — each worker thread opens the PDF once and reuses it for
+        every page it's assigned, instead of _convert_single_page reopening
+        the file and re-parsing its xref table on every call.
+        """
+        cached_doc = getattr(self._page_doc_tls, 'doc', None)
+        cached_path = getattr(self._page_doc_tls, 'path', None)
+        if cached_doc is not None and cached_path == pdf_path:
+            return cached_doc
+
+        if cached_doc is not None:
+            # Same thread, different PDF (e.g. a long-lived Flask worker
+            # thread handling successive jobs) — close the stale handle
+            # instead of leaking it.
+            try:
+                cached_doc.close()
+            except Exception:
+                pass
+            with self._page_docs_lock:
+                if cached_doc in self._page_docs_registry:
+                    self._page_docs_registry.remove(cached_doc)
+
+        doc = fitz.open(pdf_path)
+        self._page_doc_tls.doc = doc
+        self._page_doc_tls.path = pdf_path
+        with self._page_docs_lock:
+            self._page_docs_registry.append(doc)
+        return doc
+
+    def _close_page_docs(self):
+        """Close every per-thread fitz.Document opened by _get_doc_for_thread."""
+        with self._page_docs_lock:
+            docs, self._page_docs_registry = self._page_docs_registry, []
+        for doc in docs:
+            try:
+                doc.close()
+            except Exception:
+                pass
+
     def _convert_single_page(self, pdf_path: Path, page_num: int) -> Image.Image:
         """
         Convert a single PDF page to image (streaming)
-        
+
         Args:
             pdf_path: Path to PDF file
             page_num: Page number (0-indexed)
-            
+
         Returns:
             PIL Image of the page
         """
         try:
             # Use PyMuPDF (fitz) to convert single page - MUCH faster than pdf2image
-            doc = fitz.open(pdf_path)
+            doc = self._get_doc_for_thread(pdf_path)
             page = doc.load_page(page_num)
             
             # Calculate zoom based on DPI (72 is default PDF DPI)
@@ -763,14 +817,13 @@ class OptimizedPDFToEPUBConverter:
             
             # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            doc.close()
+
             return img
-            
+
         except Exception as e:
             logger.error(f"Failed to convert page {page_num + 1}: {e}")
             return None
-    
+
     def _ocr_cells_parallel(self, cells: List[List[Image.Image]]) -> List[List[str]]:
         """
         OCR table cells in parallel
@@ -2229,7 +2282,12 @@ class OptimizedPDFToEPUBConverter:
                     
                     if self._cancelled.is_set():
                         break
-            
+
+            # All worker threads (parallel or sequential) are done with
+            # pdf_path now — close every per-thread Document opened by
+            # _get_doc_for_thread so the file handles don't linger.
+            self._close_page_docs()
+
             # Check if cancelled — do NOT build EPUB/MOBI with incomplete pages
             if self._cancelled.is_set():
                 pages_processed = len(self.page_result_paths)
